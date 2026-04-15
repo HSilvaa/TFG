@@ -10,7 +10,7 @@ public class PanelRightClick : MonoBehaviour
 {
     public RectTransform PanelArchivos; //Scroll contentn
     public ContextMenuManager contextMenuScript;
-    public TMP_InputField PathInputField;  //Ruta editable barra de navegacion --> puesto que no se puede cambiar, sustituir por un text y ya
+    public TextMeshProUGUI PathText;
 
     private void OnEnable()
     {
@@ -31,29 +31,13 @@ public class PanelRightClick : MonoBehaviour
         {
             PointerEventData pointerData = (PointerEventData)eventData;
 
-            // Solo mostrar si es botón derecho y no se hizo sobre otro objeto interactivo
-            if (pointerData.button == PointerEventData.InputButton.Right) //&& !IsPointerOverUIElement())
+            if (pointerData.button == PointerEventData.InputButton.Right)
             {
                 Vector2 screenPos = pointerData.position;
-                Debug.Log("Clic derecho en fondo del panel");
-                contextMenuScript.ShowMenuSimple(PathInputField.text, screenPos);
+                contextMenuScript.ShowMenuSimple(PathText.text, screenPos);
             }
         });
 
         trigger.triggers.Add(rightClickEntry);
-    }
-
-    bool IsPointerOverUIElement()
-    {
-        PointerEventData eventDataCurrentPosition = new PointerEventData(EventSystem.current)
-        {
-            position = Mouse.current.position.ReadValue()
-        };
-
-        List<RaycastResult> results = new List<RaycastResult>();
-        EventSystem.current.RaycastAll(eventDataCurrentPosition, results);
-
-        // Excluir el fondo (PanelArchivos) si es el único bajo el mouse
-        return results.Any(r => r.gameObject != PanelArchivos.gameObject && r.gameObject.GetComponent<Button>() != null);
     }
 }

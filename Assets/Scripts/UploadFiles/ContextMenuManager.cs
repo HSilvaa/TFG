@@ -201,31 +201,41 @@ public class ContextMenuManager : MonoBehaviour
         pegarBtn.interactable = !string.IsNullOrEmpty(copiedPath);
     }
 
-    public void ShowMenu(string path, Vector2 screenPosition)
+    public void ShowMenu(string path, Vector2 screenPosition, bool isFileOrFolder = true)
     {
         selectedPath = path;
         contextMenu.SetActive(true);
 
-        copiarBtn.gameObject.SetActive(true);
-        renombrarBtn.gameObject.SetActive(true);
-        eliminarBtn.gameObject.SetActive(true);
+        // Si es un archivo o carpeta, activamos las acciones de edición
+        eliminarBtn.interactable = isFileOrFolder;
+        copiarBtn.interactable = isFileOrFolder;
+        renombrarBtn.interactable = isFileOrFolder;
+
+        // Crear carpeta y Pegar son acciones de "lugar", siempre permitidas 
+        // (Pegar depende de si hay algo en el portapapeles)
+        crearCarpetaBtn.interactable = true;
+        pegarBtn.interactable = !string.IsNullOrEmpty(copiedPath);
 
         HideRenameInput();
         contextMenu.transform.position = screenPosition;
     }
+
     public void ShowMenuSimple(string path, Vector2 screenPosition)
     {
         selectedPath = path;
         contextMenu.SetActive(true);
 
-        //No puedo hacer estas acciones si estoy seleccionando el "Fondo"
-        copiarBtn.gameObject.SetActive(false);
-        renombrarBtn.gameObject.SetActive(false);
-        eliminarBtn.gameObject.SetActive(false);
+        // Si clicamos en el FONDO: Deshabilitamos acciones de selección
+        eliminarBtn.interactable = false;
+        copiarBtn.interactable = false;
+        renombrarBtn.interactable = false;
+
+        // Acciones de fondo: Crear carpeta siempre, Pegar solo si hay algo
+        crearCarpetaBtn.interactable = true;
+        pegarBtn.interactable = !string.IsNullOrEmpty(copiedPath);
 
         HideRenameInput();
         contextMenu.transform.position = screenPosition;
-
     }
     private void Update()
     {

@@ -27,7 +27,7 @@ public class UploaderState : AbstractMenuState
     public RectTransform contentPanel; //Scroll contentn
     public GameObject FileButtonPrefab; //FileButtonPrefab
     public Button Save;                 // Boton de guardar
-    public TMP_InputField PathInputField;  //Ruta editable barra de navegacion --> puesto que no se puede cambiar, sustituir por un text y ya
+    public TextMeshProUGUI PathText;
     public Button SetRuta;  //Ruta editable boton
     public Button Atras;  //Go Back In Files
     public Button Retroceder;  //Go Back In Files
@@ -96,7 +96,7 @@ public class UploaderState : AbstractMenuState
         Save = PanelArchivos.Find("Guardar").GetComponent<Button>();
         Save.onClick.AddListener(saveChanges);
 
-        PathInputField = PanelArchivos.Find("RutaInputField").GetComponent<TMP_InputField>();
+        PathText = PanelArchivos.Find("RutaInputField").GetComponent<TextMeshProUGUI>();
         //PathInputField.onEndEdit.AddListener(OnPathInputChanged);
 
         //SetRuta = PanelArchivos.Find("SetRuta").GetComponent<Button>();
@@ -570,7 +570,7 @@ public class UploaderState : AbstractMenuState
     /// </summary>
     void RefreshView()
     {
-        PathInputField.text = CurrentFolder;
+        PathText.text = CurrentFolder;
 
         foreach (Transform t in contentPanel)
             GameObject.Destroy(t.gameObject);
@@ -625,18 +625,19 @@ public class UploaderState : AbstractMenuState
             {
                 eventID = EventTriggerType.PointerClick
             };
+
             rightClick.callback.AddListener((eventData) =>
             {
                 PointerEventData pointerData = (PointerEventData)eventData;
                 if (pointerData.button == PointerEventData.InputButton.Right)
                 {
-                    Debug.Log("Clic derecho detectado sobre: " + fCopy);
                     Vector2 screenPos = pointerData.position;
-                    contextMenuScript.ShowMenu(fCopy, screenPos);
-
+                    // Pasamos 'true' porque es un elemento (carpeta)
+                    contextMenuScript.ShowMenu(fCopy, screenPos, true);
                     EventSystem.current.SetSelectedGameObject(btn.gameObject);
                 }
             });
+
             trigger.triggers.Add(rightClick);
 
         }
@@ -709,19 +710,19 @@ public class UploaderState : AbstractMenuState
             {
                 eventID = EventTriggerType.PointerClick
             };
+
             rightClick.callback.AddListener((eventData) =>
             {
                 PointerEventData pointerData = (PointerEventData)eventData;
                 if (pointerData.button == PointerEventData.InputButton.Right)
                 {
-                    Debug.Log("Clic derecho detectado sobre: " + fCopy);
                     Vector2 screenPos = pointerData.position;
-                    contextMenuScript.ShowMenu(fCopy, screenPos);
-
+                    // Pasamos 'true' porque es un elemento (archivo)
+                    contextMenuScript.ShowMenu(fCopy, screenPos, true);
                     EventSystem.current.SetSelectedGameObject(btn.gameObject);
-
                 }
             });
+
             trigger.triggers.Add(rightClick);
         }
     }
@@ -737,7 +738,7 @@ public class UploaderState : AbstractMenuState
         {
             // Opcional: puedes mostrar mensaje error o volver a poner la ruta actual
             Debug.LogWarning("Ruta no válida: " + newPath);
-            PathInputField.text = CurrentFolder;
+            PathText.text = CurrentFolder;
         }
     }
 
