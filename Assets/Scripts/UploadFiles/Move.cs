@@ -15,14 +15,11 @@ public class Move : MonoBehaviour
     {
         if (!targetToMove) return;
 
-        // Alternar el estado
         isExpanded = !isExpanded;
 
-        // Mover hacia arriba o abajo según el estado
         float direction = isExpanded ? moveDistance : -moveDistance;
         targetToMove.DOMoveY(targetToMove.position.y + direction, moveDuration);
 
-        // Rotar la flecha 0° ↔ 180°
         float targetRotation = isExpanded ? 90f : -90f;
         arrowButton.DORotate(new Vector3(0, 0, targetRotation), moveDuration);
     }

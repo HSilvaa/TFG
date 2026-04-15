@@ -97,10 +97,6 @@ public class UploaderState : AbstractMenuState
         Save.onClick.AddListener(saveChanges);
 
         PathText = PanelArchivos.Find("RutaInputField").GetComponent<TextMeshProUGUI>();
-        //PathInputField.onEndEdit.AddListener(OnPathInputChanged);
-
-        //SetRuta = PanelArchivos.Find("SetRuta").GetComponent<Button>();
-        //SetRuta.onClick.AddListener(SelectRootFolder);
 
         Atras = PanelArchivos.Find("Atrás").GetComponent<Button>();
         Atras.onClick.AddListener(GoBack);
@@ -140,6 +136,11 @@ public class UploaderState : AbstractMenuState
     public override void Exit() //Reset por si vuelve atrás
     {
 
+        Save.onClick.RemoveAllListeners();
+
+        Atras.onClick.RemoveAllListeners();
+
+        SubirArchivos.onClick.RemoveAllListeners();
     }
 
     public override void FixedUpdate()
@@ -223,11 +224,20 @@ public class UploaderState : AbstractMenuState
                 GameObject btn = FindButtonByPath(file);
                 if (btn != null)
                 {
+                    // 1. Cambiamos el color base del componente Image (el fondo)
+                    var btnImage = btn.GetComponent<UnityEngine.UI.Image>();
+                    if (btnImage != null)
+                    {
+                        btnImage.color = Color.red;
+                    }
+
+                    // 2. Opcional: Ajustar el ColorBlock para que al pasar el ratón no se vea raro
                     var btnComp = btn.GetComponent<Button>();
                     if (btnComp != null)
                     {
                         ColorBlock colors = btnComp.colors;
                         colors.normalColor = Color.red;
+                        colors.selectedColor = new Color(0.8f, 0f, 0f); // Rojo más oscuro al seleccionar
                         btnComp.colors = colors;
                     }
                 }
@@ -297,14 +307,6 @@ public class UploaderState : AbstractMenuState
         foreach (Transform child in CreandoContextoPanel.transform)
         {
             child.gameObject.SetActive(true);
-
-            // Si el hijo es un botón, le asignamos la acción de cancelar
-            Button btn = child.GetComponent<Button>();
-            if (btn != null)
-            {
-                btn.onClick.RemoveAllListeners(); // Por seguridad
-                btn.onClick.AddListener(() => CancelarContextoPanel(true));
-            }
         }
     }
 
@@ -312,7 +314,7 @@ public class UploaderState : AbstractMenuState
     {
         if (error)
         {
-            notifManager.ShowNotification("ERROR", Color.red, 5f);
+            notifManager.ShowNotification("Entrenamiento Cancelado. Cambios no persistidos", Color.red, 5f);
         }
         else
         {
@@ -599,6 +601,14 @@ public class UploaderState : AbstractMenuState
                 }
             }
 
+            string relativeDir = Path.GetRelativePath(rootFolder, folder);
+            var folderParts = relativeDir.Split(Path.DirectorySeparatorChar);
+
+            if (folderParts.Length >= 2)
+            {
+                PintarBotonError(btn);
+            }
+
             string fCopy = folder;
             btn.GetComponent<Button>().onClick.AddListener(() =>
             {
@@ -656,6 +666,17 @@ public class UploaderState : AbstractMenuState
             textComp.text = fileName;
 
             btn.SetActive(true);
+            string ext = Path.GetExtension(file).ToLower();
+            string relativeFile = Path.GetRelativePath(rootFolder, file);
+            var fileParts = relativeFile.Split(Path.DirectorySeparatorChar);
+
+            bool ubicacionIlegal = fileParts.Length == 1 || fileParts.Length >= 3;
+            bool extensionInvalida = !allowedExts.Contains(ext);
+
+            if (ubicacionIlegal || extensionInvalida)
+            {
+                PintarBotonError(btn);
+            }
 
             var iconObj = btn.transform.Find("Icon");
             if (iconObj != null)
@@ -667,7 +688,6 @@ public class UploaderState : AbstractMenuState
                     // Asigna el sprite que quieres mostrar en el icono
                     imgComp.sprite = GetIconForExtension(Path.GetExtension(file).ToLower());
 
-                    string ext = Path.GetExtension(file).ToLower();
                     imgComp.sprite = GetIconForExtension(ext);
 
                     // Si la extensión NO está en la lista permitida, pintar el botón naranja
@@ -727,18 +747,27 @@ public class UploaderState : AbstractMenuState
         }
     }
 
-    void OnPathInputChanged(string newPath)
+    private void PintarBotonError(GameObject btn)
     {
-        if (Directory.Exists(newPath))
+        Color colorError = new Color(1f, 0.2f, 0.2f, 1f); // Rojo intenso
+
+        // 1. Cambiar el color de la imagen de fondo
+        var btnImage = btn.GetComponent<UnityEngine.UI.Image>();
+        if (btnImage != null)
         {
-            CurrentFolder = newPath;
-            RefreshView();
+            btnImage.color = colorError;
         }
-        else
+
+        // 2. Cambiar los colores de transición del botón para que no vuelva a azul al quitar el mouse
+        var btnComp = btn.GetComponent<Button>();
+        if (btnComp != null)
         {
-            // Opcional: puedes mostrar mensaje error o volver a poner la ruta actual
-            Debug.LogWarning("Ruta no válida: " + newPath);
-            PathText.text = CurrentFolder;
+            ColorBlock colors = btnComp.colors;
+            colors.normalColor = colorError;
+            colors.highlightedColor = new Color(1f, 0.4f, 0.4f, 1f); // Rojo claro al pasar mouse
+            colors.pressedColor = new Color(0.7f, 0f, 0f, 1f);       // Rojo oscuro al clicar
+            colors.selectedColor = colorError;
+            btnComp.colors = colors;
         }
     }
 
