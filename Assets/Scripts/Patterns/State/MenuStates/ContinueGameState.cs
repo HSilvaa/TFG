@@ -30,7 +30,8 @@ public class ContinueGameState : AbstractMenuState
         ActiveGO = new List<GameObject>();
         // Obtener referencias necesarias
         buttonContainer = GameObject.Find("ContinueThings").transform; //Panel activo donde están todos estos elementos
-        panelDeBotones = buttonContainer.Find("BotonPanel"); //Panel con un vertical layout donde es´tán los personajes guardados
+        var viewport = buttonContainer.Find("Viewport");
+        panelDeBotones = viewport.Find("BotonPanel"); //Panel con un vertical layout donde es´tán los personajes guardados
 
         buttonPrefab = buttonContainer.Find("CharacterButtonPrefab").GetComponent<Button>(); //Prefab del boton
         noCharactersYet = buttonContainer.Find("NoCharactersText").GetComponent<TMP_Text>(); //Texto si no hay characters
@@ -140,8 +141,8 @@ public class ContinueGameState : AbstractMenuState
             TMP_Text textName = newButton.transform.Find("Name").GetComponent<TMP_Text>();
             textName.text = character.Name;
 
-            TMP_Text textDesc = newButton.transform.Find("Desc").GetComponent<TMP_Text>();
-            textDesc.text = character.Description;
+            //TMP_Text textDesc = newButton.transform.Find("Desc").GetComponent<TMP_Text>();
+            //textDesc.text = character.Description;
 
             newButton.onClick.AddListener(() => OnCharacterButtonClick(character));
 

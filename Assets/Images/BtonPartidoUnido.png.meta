@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: 39575cdae71b6d94e8de8684176f6dc9
+guid: 7131be971fc845149931b39c1529a631
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: 8022866174986626649
-    second: Lasers_0
+      213: -8157627464858821094
+    second: BtonPartidoUnido_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -100,13 +100,13 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: Lasers_0
+      name: BtonPartidoUnido_0
       rect:
         serializedVersion: 2
-        x: 208
-        y: 242
-        width: 962
-        height: 211
+        x: 82
+        y: 35
+        width: 1322
+        height: 719
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -115,8 +115,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: 95623987742f65f60800000000000000
-      internalID: 8022866174986626649
+      spriteID: a1e9e1baa094ace80800000000000000
+      internalID: -8157627464858821094
       vertices: []
       indices: 
       edges: []
