@@ -21,9 +21,11 @@ public class ContinueGameState : AbstractMenuState
     private List<GameObject> ActiveGO;
 
     private AbstractMenuState state;
+    private APIManager api;
 
     public ContinueGameState(IMenuState menu) : base(menu)
     {
+        api = GameObject.FindObjectOfType<APIManager>();
     }
     public async override void Enter()
     {
@@ -78,88 +80,42 @@ public class ContinueGameState : AbstractMenuState
 
         CreateCharacterButtons();
     }
-
-    public override void Exit()
-    {
-        foreach (Transform child in panelDeBotones)
-            GameObject.Destroy(child.gameObject);
-
-        foreach (GameObject go in ActiveGO)
-        {
-            go.SetActive(false);
-        }
-    }
-
-    public override void FixedUpdate()
-    {
-    }
-
-    public override void TransicionExit()
-    {
-        menu.SetState(state);
-    }
-
-    public override void TransicionEnter()
-    {
-        CanvasGroup backGroup = BackButt.GetComponent<CanvasGroup>();
-
-        // Si no tienen CanvasGroup, se lo añadimos para el fade
-        if (backGroup == null) backGroup = BackButt.gameObject.AddComponent<CanvasGroup>();
-
-        backGroup.alpha = 0;
-        backGroup.DOFade(1f, 2f);
-
-        // Animación del panel
-        buttonContainer.parent.DOScale(Vector3.one, 2f).SetEase(Ease.InOutSine);
-    }
-
-    public override void Update()
-    {
-
-    }
-
-    /// <summary>
-    /// Borra los botones existentens y los crea de nuevo
-    /// </summary>
     public void CreateCharacterButtons()
     {
-        List<SQLite.Character> characters = SQLite.Instance.GetCharacters();
+        // Limpiar botones anteriores antes de la nueva carga
+        foreach (Transform child in panelDeBotones) GameObject.Destroy(child.gameObject);
 
-        if (characters.Count == 0) { noCharactersYet.text = characters.Count == 0 ? "No hay personajes para seleccionar" : ""; return; }
+        api.GetAllCharacters((characters) => {
 
-        // Limpiar botones anteriores
-        foreach (Transform child in panelDeBotones)
-            GameObject.Destroy(child.gameObject);
-
-        //Por cada personaje en la BD, crea un boton
-        foreach (var character in characters)
-        {
-            Button newButton = GameObject.Instantiate(buttonPrefab, panelDeBotones);
-
-            newButton.gameObject.SetActive(true);
-
-            TMP_Text textName = newButton.transform.Find("Name").GetComponent<TMP_Text>();
-            textName.text = character.Name;
-
-            //TMP_Text textDesc = newButton.transform.Find("Desc").GetComponent<TMP_Text>();
-            //textDesc.text = character.Description;
-
-            newButton.onClick.AddListener(() => OnCharacterButtonClick(character));
-
-            Button delteBut = newButton.transform.Find("Delete").GetComponent<Button>();
-            delteBut.onClick.AddListener(() =>
+            if (characters == null || characters.Count == 0)
             {
-                OnDeleteClick(character.Id);
-            });
-        }
+                noCharactersYet.gameObject.SetActive(true);
+                noCharactersYet.text = "No hay personajes para seleccionar";
+                return;
+            }
+
+            noCharactersYet.gameObject.SetActive(false);
+
+            foreach (var character in characters)
+            {
+                Button newButton = GameObject.Instantiate(buttonPrefab, panelDeBotones);
+                newButton.gameObject.SetActive(true);
+
+                newButton.transform.Find("Name").GetComponent<TMP_Text>().text = character.Name;
+
+                // Listener para seleccionar
+                newButton.onClick.AddListener(() => OnCharacterButtonClick(character));
+
+                // Listener para borrar
+                Button deleteBut = newButton.transform.Find("Delete").GetComponent<Button>();
+                deleteBut.onClick.AddListener(() => OnDeleteClick(character.Id));
+            }
+        });
     }
 
-    /// <summary>
-    /// Cuando se hace click en un botón de personaje, se guarda en el SO la info
-    /// </summary>
-    /// <param name="character"></param>
-    public void OnCharacterButtonClick(SQLite.Character character)
+    public void OnCharacterButtonClick(APIManager.CharacterData character)
     {
+        // Guardamos TODA la info en el ScriptableObject (SO)
         characterSelected.characterName = character.Name;
         characterSelected.characterAge = character.Age;
         characterSelected.characterDescription = character.Description;
@@ -167,22 +123,33 @@ public class ContinueGameState : AbstractMenuState
         characterSelected.characterId = character.Id;
 
         ContinueButton.gameObject.SetActive(true);
+        Debug.Log($"Seleccionado: {character.Name} (ID: {character.Id})");
     }
 
-    /// <summary>
-    /// Cuando se borra un personaje, se elimina de la BD
-    /// </summary>
-    /// <param name="id"></param>
     public void OnDeleteClick(int id)
     {
-        SQLite.Instance.DeleteCharById(id);
-
-        // Recargar personajes
-        CreateCharacterButtons();
-
-        // Ocultar botón de continuar
-        ContinueButton.gameObject.SetActive(false);
+        api.DeleteCharacter(id, () => {
+            // Cuando Python confirme el borrado, refrescamos la lista
+            CreateCharacterButtons();
+            ContinueButton.gameObject.SetActive(false);
+        });
     }
+
+    public override void Exit()
+    {
+        foreach (Transform child in panelDeBotones) GameObject.Destroy(child.gameObject);
+        foreach (GameObject go in ActiveGO) go.SetActive(false);
+    }
+
+    public override void TransicionExit() => menu.SetState(state);
+
+    public override void TransicionEnter()
+    {
+        buttonContainer.parent.DOScale(Vector3.one, 1f).SetEase(Ease.OutBack);
+    }
+
+    public override void Update() { }
+    public override void FixedUpdate() { }
 }
 
 

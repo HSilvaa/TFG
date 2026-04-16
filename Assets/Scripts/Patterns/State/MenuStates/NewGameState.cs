@@ -5,12 +5,8 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using TMPro;
-using Unity.VisualScripting;
-using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UI;
-using UnityEngine.UIElements;
-using Button = UnityEngine.UI.Button;
 
 public class NewGameState : AbstractMenuState
 {
@@ -25,160 +21,131 @@ public class NewGameState : AbstractMenuState
     private Button BackButt;
 
     private List<GameObject> ActiveGO;
-
-
     private AbstractMenuState state;
+
+    private APIManager api;
 
     public NewGameState(IMenuState menu) : base(menu)
     {
+        api = GameObject.FindObjectOfType<APIManager>();
     }
+
     public async override void Enter()
     {
-        // Obtener referencias necesarias
-        NewThings = GameObject.Find("NewThings").transform; //Panel activo donde están todos estos elementos
-
+        NewThings = GameObject.Find("NewThings").transform;
         ActiveGO = new List<GameObject>();
 
-        DescriptionField = NewThings.Find("DescriptionField").GetComponent<TMP_InputField>(); //Escribir la descripcion
+        DescriptionField = NewThings.Find("DescriptionField").GetComponent<TMP_InputField>();
         ActiveGO.Add(DescriptionField.gameObject);
-        NameField = NewThings.Find("NameField").GetComponent<TMP_InputField>(); //Escribir el nombre
+        NameField = NewThings.Find("NameField").GetComponent<TMP_InputField>();
         ActiveGO.Add(NameField.gameObject);
-        AgeField = NewThings.Find("AgeField").GetComponent<TMP_InputField>(); //Escribir la edad
+        AgeField = NewThings.Find("AgeField").GetComponent<TMP_InputField>();
         ActiveGO.Add(AgeField.gameObject);
-        EpocaField = NewThings.Find("EpocaField").GetComponent<TMP_Dropdown>(); //Determinar la epoca (desplegable)
+        EpocaField = NewThings.Find("EpocaField").GetComponent<TMP_Dropdown>();
         ActiveGO.Add(EpocaField.gameObject);
 
-        NewCharacter = GameObject.Find("ScriptableCharacter").GetComponent<HolderScriptable>().data; //Scriptable para guardar el personaje actual selecionado
-        ContinueButton = NewThings.Find("ContinueButtNewGame").GetComponent<Button>(); //Botton de continuar
+        NewCharacter = GameObject.Find("ScriptableCharacter").GetComponent<HolderScriptable>().data;
+        ContinueButton = NewThings.Find("ContinueButtNewGame").GetComponent<Button>();
         ActiveGO.Add(ContinueButton.gameObject);
-        BackButt = NewThings.Find("BackButtNewGame").GetComponent<Button>(); //Boton de retroceder
+        BackButt = NewThings.Find("BackButtNewGame").GetComponent<Button>();
         ActiveGO.Add(BackButt.gameObject);
 
-        foreach (GameObject go in ActiveGO)
-        {
-            go.SetActive(true);
-        }
+        api.GetRootFolder((rutaServidor) => {
+            FillWithEpochs(rutaServidor);
+            ContinueButton.interactable = true;
+        });
 
-        //Poner como ultimo hijo para que se pueda clickar bien
+        foreach (GameObject go in ActiveGO) go.SetActive(true);
+
         NewThings.transform.SetAsLastSibling();
-
         TransicionEnter();
 
         ContinueButton.onClick.AddListener(() =>
         {
-            state = new ChattingMenuState(menu);
-
+            // Primero guardamos y, cuando el servidor responda, cambiamos de estado
             AddCharacterToDataBase();
-
-            TransicionExit();
         });
 
         BackButt.onClick.AddListener(() =>
         {
             state = new ChoseCharacterState(menu);
-
             TransicionExit();
         });
-
-        List<string> epochs = FillWithEpochs();
-        EpocaField.ClearOptions();
-        EpocaField.AddOptions(epochs); 
     }
 
-    private List<string> FillWithEpochs()
+    private void FillWithEpochs(string rootPath)
     {
-        // Obtener la ruta raíz desde SQLite
-        string rootPath = SQLite.Instance.GetFolder(1).Route;
-
-        // Validación básica
+        // Validación: si el servidor no tiene ruta o no existe localmente
         if (string.IsNullOrEmpty(rootPath) || !Directory.Exists(rootPath))
-            return new List<string>();
-
-        // Obtener todas las carpetas directas dentro de rootPath
-        var directories = Directory.GetDirectories(rootPath);
-
-        // Obtener solo los nombres (no las rutas completas)
-        List<string> folderNames = directories
-            .Select(dir => Path.GetFileName(dir))
-            .ToList();
-
-        return folderNames;
-    }
-
-
-    private async void AddCharacterToDataBase()
-    {
-        List<string> values = new List<string>();
-        values.Add(NameField.text);
-        values.Add(AgeField.text);
-        values.Add(DescriptionField.text);
-        values.Add(EpocaField.options[EpocaField.value].text);
-
-        //Comprobamos que no haya valores nulos/empty
-        foreach (string value in values)
         {
-            if (!string.IsNullOrEmpty(value))
-            {
-                continue;
-            }
-            else
-            {
-                throw new Exception("Todos los campos deben contener un valor");
-            }
+            Debug.LogError("La ruta del servidor no es accesible localmente: " + rootPath);
+            return;
         }
 
-        NewCharacter.characterName = NameField.text;
-        NewCharacter.characterAge = AgeField.text;
-        NewCharacter.characterDescription = DescriptionField.text;
+        try
+        {
+            // Obtener las carpetas (Épocas)
+            var directories = Directory.GetDirectories(rootPath);
+            List<string> folderNames = directories
+                .Select(dir => Path.GetFileName(dir))
+                .ToList();
 
-        NewCharacter.characterEpoca = EpocaField.options[EpocaField.value].text;
+            EpocaField.ClearOptions();
+            EpocaField.AddOptions(folderNames);
 
-        //Si está en auto, llamamos al servicio para que nos detecte la epoca
-        //if (NewCharacter.characterEpoca.Equals("AUTO"))
-        //{
-        //    NewCharacter.characterEpoca = FindEpoca(EpocaField.options[EpocaField.value].text).ToString();
-        //}
-
-        int charId = SQLite.Instance.AddCharacter(NewCharacter.characterName, NewCharacter.characterAge, NewCharacter.characterDescription, NewCharacter.characterEpoca);
-
-        NewCharacter.characterId = charId;
-
-        values.Clear();
+            Debug.Log($"Épocas cargadas desde: {rootPath}");
+        }
+        catch (Exception e)
+        {
+            Debug.LogError("Error al leer carpetas de época: " + e.Message);
+        }
     }
-    private async Task<string> FindEpoca(string epoca)
+
+    private void AddCharacterToDataBase()
     {
-        return await ServiceLocatorManager.RunServiceWithResultAsync<GetEpoca, string>(NewCharacter);
+        string name = NameField.text;
+        string age = AgeField.text;
+        string desc = DescriptionField.text;
+        string epoca = EpocaField.options[EpocaField.value].text;
+
+        // Validación simple
+        if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(age) || string.IsNullOrEmpty(desc))
+        {
+            Debug.LogError("Faltan campos por rellenar");
+            return;
+        }
+
+        api.CreateCharacter(name, age, desc, epoca, (newId) =>
+        {
+            NewCharacter.characterName = name;
+            NewCharacter.characterAge = age;
+            NewCharacter.characterDescription = desc;
+            NewCharacter.characterEpoca = epoca;
+            NewCharacter.characterId = newId;
+
+            Debug.Log($"Personaje creado en Backend con ID: {newId}");
+
+            state = new ChattingMenuState(menu);
+            TransicionExit();
+        });
     }
 
     public override void Exit()
     {
+        ContinueButton.onClick.RemoveAllListeners();
+        BackButt.onClick.RemoveAllListeners();
 
-        foreach (GameObject go in ActiveGO)
-        {
-            go.SetActive(false);
-        }
+        NameField.text = "";
+        AgeField.text = "";
+        DescriptionField.text = "";
+        EpocaField.options[EpocaField.value].text = "";
 
+        foreach (GameObject go in ActiveGO) go.SetActive(false);
         ActiveGO.Clear();
     }
 
-    public override void FixedUpdate()
-    {
-    }
-
-    public override async void TransicionEnter()
-    {
-
-    }
-
-    public override async void TransicionExit()
-    {
-        menu.SetState(state);
-    }
-
-    public override void Update()
-    {
-
-    }
+    public override void FixedUpdate() { }
+    public override void TransicionEnter() { }
+    public override void TransicionExit() => menu.SetState(state);
+    public override void Update() { }
 }
-
-

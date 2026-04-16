@@ -40,6 +40,14 @@ class HistorialText(BaseModel):
     historial: str
     characterName: str
 
+@app.get("/status")
+def get_status():
+    """
+    Endpoint de control para que Unity sepa que el servidor está listo.
+    """
+    print("LOG: Unity ha consultado el estado - Servidor Activo")
+    return {"status": "ok"}
+
 # ========== ENDPOINTS DE CONTEXTO Y MUNDO ==========
 
 @app.post("/CrearContexto")
@@ -102,6 +110,18 @@ def get_all_characters(db: Session = Depends(database.get_db)):
         print(f"Error al obtener personajes: {e}")
         raise HTTPException(status_code=500, detail="Error interno al listar personajes")
 
+@app.delete("/characters/{char_id}")
+def delete_character_endpoint(char_id: int, db: Session = Depends(database.get_db)):
+    try:
+        success = crud.delete_character(db, char_id)
+        if success:
+            # Opcional: Aquí podrías añadir lógica para borrar
+            # físicamente los archivos .index del personaje si lo deseas.
+            return {"status": "success", "message": f"Character {char_id} deleted"}
+        raise HTTPException(status_code=404, detail="Character not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # ========== ENDPOINTS DE CONVERSACIÓN ==========
 
 @app.post("/send")
@@ -143,6 +163,16 @@ def update_root_folder(query: QueryText, db: Session = Depends(database.get_db))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/folders/{folder_id}")
+def get_folder(folder_id: int, db: Session = Depends(database.get_db)):
+    folder = crud.get_folder_by_id(db, folder_id)
+    if not folder:
+        raise HTTPException(status_code=404, detail="Folder not found")
+    return {
+        "Id": folder.Id,
+        "Name": folder.Name,
+        "Route": folder.Route
+    }
 
 @app.post("/resetDB")
 def reset_database_endpoint(db: Session = Depends(database.get_db)):

@@ -7,7 +7,7 @@ using System;
 
 public class APIManager : MonoBehaviour
 {
-    private string baseUrl = "http://127.0.0.1:5000";
+    private string baseUrl = "http://127.0.0.1:8000";
 
     // ========== MODELOS DE DATOS (Matching Pydantic) ==========
     [Serializable] public class QueryText { public string text; }
@@ -34,6 +34,14 @@ public class APIManager : MonoBehaviour
     {
         public string historial;
         public string characterName;
+    }
+
+    [Serializable]
+    public class FolderData
+    {
+        public int Id;
+        public string Name;
+        public string Route;
     }
 
     // ========== WRAPPERS PARA RESPUESTAS JSON ==========
@@ -99,7 +107,49 @@ public class APIManager : MonoBehaviour
         StartCoroutine(PostRequest("/resetDB", "{}"));
     }
 
+    public void GetRootFolder(Action<string> onSuccess)
+    {
+        // Llamamos al endpoint que devuelve la carpeta con ID 1
+        StartCoroutine(GetRequest("/folders/1", (json) => {
+            // Deserializamos usando FolderData, que SÍ tiene el campo Route
+            var folder = JsonUtility.FromJson<FolderData>(json);
+
+            if (folder != null && !string.IsNullOrEmpty(folder.Route))
+            {
+                onSuccess?.Invoke(folder.Route);
+            }
+            else
+            {
+                Debug.LogError("La respuesta del servidor no contiene una ruta válida.");
+            }
+        }));
+    }
+    public void DeleteCharacter(int charId, Action onSuccess)
+    {
+        // Usamos el método DELETE
+        StartCoroutine(DeleteRequest($"/characters/{charId}", (json) => {
+            onSuccess?.Invoke();
+        }));
+    }
+
+
     // ========== MOTORES DE PETICIÓN ==========
+
+    IEnumerator DeleteRequest(string endpoint, Action<string> callback)
+    {
+        var request = UnityWebRequest.Delete(baseUrl + endpoint);
+        request.downloadHandler = new DownloadHandlerBuffer();
+        yield return request.SendWebRequest();
+
+        if (request.result == UnityWebRequest.Result.Success)
+        {
+            callback?.Invoke(request.downloadHandler.text);
+        }
+        else
+        {
+            Debug.LogError($"❌ Error en DELETE {endpoint}: " + request.error);
+        }
+    }
 
     IEnumerator PostRequest(string endpoint, string json, Action<string> callback = null)
     {

@@ -79,3 +79,15 @@ def reset_all_tables(db: Session):
     except Exception as e:
         db.rollback()
         raise e
+
+
+def delete_character(db: Session, char_id: int):
+    db.query(Conversation).filter(Conversation.CharacterId == char_id).delete()
+    db.query(Resumen).filter(Resumen.CharacterId == char_id).delete()
+
+    db_char = db.query(Character).filter(Character.Id == char_id).first()
+    if db_char:
+        db.delete(db_char)
+        db.commit()
+        return True
+    return False
