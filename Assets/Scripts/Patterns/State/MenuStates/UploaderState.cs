@@ -51,6 +51,8 @@ public class UploaderState : AbstractMenuState
     // Rutas
     string rootFolder = Path.Combine(Application.persistentDataPath, "UploadedFiles");
 
+    private APIManager api;
+
     private string _currentFolder = "";
 
     //Notificaciones
@@ -71,6 +73,7 @@ public class UploaderState : AbstractMenuState
 
     public UploaderState(IMenuState menu) : base(menu)
     {
+        api = GameObject.FindObjectOfType<APIManager>();
     }
 
     public async override void Enter()
@@ -112,19 +115,20 @@ public class UploaderState : AbstractMenuState
 
         notifManager = GameObject.FindObjectOfType<NotificationManager>();
 
-        //Si hay un folder guardado, lo muestra directamente
-        SQLite.Folder myFolder = SQLite.Instance.GetFolder(1);
+        api.GetRootFolder((rutaServidor) => {
+            if (!string.IsNullOrEmpty(rutaServidor))
+            {
+                rootFolder = rutaServidor;
+            }
+            else
+            {
+                if (!Directory.Exists(rootFolder))
+                    Directory.CreateDirectory(rootFolder);
+            }
 
-        //if (myFolder != null)
-        //{
-        //    rootFolder = myFolder.Route;
-        //}
-        //else //Si no, muestra uno base
-        //{
-        //    rootFolder = Path.Combine(Application.persistentDataPath, "UploadedFiles");
-        //    if (!Directory.Exists(rootFolder))
-        //        Directory.CreateDirectory(rootFolder);
-        //}
+            CurrentFolder = rootFolder;
+            RefreshView();
+        });
 
         CurrentFolder = rootFolder;
 
@@ -275,14 +279,7 @@ public class UploaderState : AbstractMenuState
         }
 
         // Guardar cambios en la base de datos
-        if (SQLite.Instance.GetFolder(1) != null)
-        {
-            SQLite.Instance.UpdateFolder(1, "RootFolder", rootFolder);
-        }
-        else
-        {
-            SQLite.Instance.AddFolder("RootFolder", rootFolder);
-        }
+        api.UpdateRootFolder(rootFolder);
 
         notifManager.ShowNotification("Entrenando con archivos en la ruta ../UploadedFiles", Color.yellow, 5f);
 
@@ -290,13 +287,10 @@ public class UploaderState : AbstractMenuState
 
         string respuesta = await ServiceLocatorManager.RunServiceWithResultAsync<CreateContext, string>(rootFolder);
 
-        if(respuesta.Equals("True"))
+        if (respuesta.Equals("True"))
         {
+            await Task.Delay(2000);
             CancelarContextoPanel(false);
-        }
-        else
-        {
-
         }
     }
 

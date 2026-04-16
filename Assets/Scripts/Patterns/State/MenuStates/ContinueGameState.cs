@@ -20,6 +20,8 @@ public class ContinueGameState : AbstractMenuState
 
     private List<GameObject> ActiveGO;
 
+    private GameObject itemPrefab;
+
     private AbstractMenuState state;
     private APIManager api;
 
@@ -35,7 +37,8 @@ public class ContinueGameState : AbstractMenuState
         var viewport = buttonContainer.Find("Viewport");
         panelDeBotones = viewport.Find("BotonPanel"); //Panel con un vertical layout donde es´tán los personajes guardados
 
-        buttonPrefab = buttonContainer.Find("CharacterButtonPrefab").GetComponent<Button>(); //Prefab del boton
+        itemPrefab = buttonContainer.Find("CharacterButtonPrefab").gameObject;
+
         noCharactersYet = buttonContainer.Find("NoCharactersText").GetComponent<TMP_Text>(); //Texto si no hay characters
         characterSelected = GameObject.Find("ScriptableCharacter").GetComponent<HolderScriptable>().data; //Scriptable para guardar el personaje actual selecionado
         ContinueButton = buttonContainer.Find("ContinueButton").GetComponent<Button>(); //Botton de continuar
@@ -82,7 +85,6 @@ public class ContinueGameState : AbstractMenuState
     }
     public void CreateCharacterButtons()
     {
-        // Limpiar botones anteriores antes de la nueva carga
         foreach (Transform child in panelDeBotones) GameObject.Destroy(child.gameObject);
 
         api.GetAllCharacters((characters) => {
@@ -90,7 +92,7 @@ public class ContinueGameState : AbstractMenuState
             if (characters == null || characters.Count == 0)
             {
                 noCharactersYet.gameObject.SetActive(true);
-                noCharactersYet.text = "No hay personajes para seleccionar";
+                noCharactersYet.text = "No hay personajes guardados";
                 return;
             }
 
@@ -98,16 +100,16 @@ public class ContinueGameState : AbstractMenuState
 
             foreach (var character in characters)
             {
-                Button newButton = GameObject.Instantiate(buttonPrefab, panelDeBotones);
-                newButton.gameObject.SetActive(true);
+                GameObject newItem = GameObject.Instantiate(itemPrefab, panelDeBotones);
+                newItem.SetActive(true);
 
-                newButton.transform.Find("Name").GetComponent<TMP_Text>().text = character.Name;
+                Transform selectTransform = newItem.transform.Find("SelectChar");
+                Button selectBut = selectTransform.GetComponent<Button>();
 
-                // Listener para seleccionar
-                newButton.onClick.AddListener(() => OnCharacterButtonClick(character));
+                selectTransform.Find("Name").GetComponent<TMP_Text>().text = character.Name;
+                selectBut.onClick.AddListener(() => OnCharacterButtonClick(character));
 
-                // Listener para borrar
-                Button deleteBut = newButton.transform.Find("Delete").GetComponent<Button>();
+                Button deleteBut = newItem.transform.Find("Delete").GetComponent<Button>();
                 deleteBut.onClick.AddListener(() => OnDeleteClick(character.Id));
             }
         });
@@ -115,7 +117,6 @@ public class ContinueGameState : AbstractMenuState
 
     public void OnCharacterButtonClick(APIManager.CharacterData character)
     {
-        // Guardamos TODA la info en el ScriptableObject (SO)
         characterSelected.characterName = character.Name;
         characterSelected.characterAge = character.Age;
         characterSelected.characterDescription = character.Description;
@@ -123,13 +124,12 @@ public class ContinueGameState : AbstractMenuState
         characterSelected.characterId = character.Id;
 
         ContinueButton.gameObject.SetActive(true);
-        Debug.Log($"Seleccionado: {character.Name} (ID: {character.Id})");
+
     }
 
     public void OnDeleteClick(int id)
     {
         api.DeleteCharacter(id, () => {
-            // Cuando Python confirme el borrado, refrescamos la lista
             CreateCharacterButtons();
             ContinueButton.gameObject.SetActive(false);
         });
