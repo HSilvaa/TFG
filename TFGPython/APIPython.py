@@ -53,14 +53,6 @@ def create_contexto(query: QueryText):
         print(f"Error al crear contexto: {e}")
         return {"contextCreated": "False", "error": str(e)}
 
-@app.post("/GetEpoca")
-def get_epoca(query: QueryText):
-    """Analiza un texto para determinar a qué época pertenece (RAG)."""
-    try:
-        epoca = obtener_contexto_mas_relevante(query.text)
-        return {"epoca": epoca}
-    except Exception as e:
-        return {"error": "Época no encontrada", "detail": str(e)}
 
 # ========== ENDPOINTS DE PERSONAJES (CRUD) ==========
 
@@ -92,6 +84,23 @@ def get_character(char_id: int, db: Session = Depends(database.get_db)):
         "Description": char.Description,
         "Epoca": char.Epoca
     }
+@app.get("/characters")
+def get_all_characters(db: Session = Depends(database.get_db)):
+    """Obtiene la lista de todos los personajes guardados en la base de datos."""
+    try:
+        characters = crud.get_characters(db)
+        return [
+            {
+                "Id": char.Id,
+                "Name": char.Name,
+                "Age": char.Age,
+                "Description": char.Description,
+                "Epoca": char.Epoca
+            } for char in characters
+        ]
+    except Exception as e:
+        print(f"Error al obtener personajes: {e}")
+        raise HTTPException(status_code=500, detail="Error interno al listar personajes")
 
 # ========== ENDPOINTS DE CONVERSACIÓN ==========
 
@@ -110,7 +119,6 @@ def send_message(request: MessageRequest, db: Session = Depends(database.get_db)
 def get_conversations(char_id: int, db: Session = Depends(database.get_db)):
     """Devuelve el historial literal de conversaciones."""
     convs = crud.get_conversations(db, char_id)
-    # Formateamos como pide tu documentación: "User: ... Assistant: ..."
     return [c.Historial for c in convs]
 
 @app.post("/resumir")
