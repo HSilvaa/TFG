@@ -137,13 +137,31 @@ def update_root_folder(query: QueryText, db: Session = Depends(database.get_db))
     try:
         folder = crud.update_or_create_root_folder(db, "RootFolder", query.text)
 
-        eliminar_todos_los_indices()
         construir_todos_los_indices_Unity(query.text)
 
         return {"status": "success", "route": folder.Route}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@app.post("/resetDB")
+def reset_database_endpoint(db: Session = Depends(database.get_db)):
+    """
+    Borra todos los datos de la DB SQL y elimina los índices FAISS
+    de mundo y personajes.
+    """
+    try:
+        crud.reset_all_tables(db)
+        eliminar_todos_los_indices()
+
+        print("⚠️ Base de datos y archivos de índices reseteados por completo.")
+        return {"status": "success", "message": "Base de datos y memorias FAISS reiniciadas"}
+
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error al resetear la DB: {str(e)}")
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=5000)
+    #python -m uvicorn APIPython:app --host 127.0.0.1 --port 8000

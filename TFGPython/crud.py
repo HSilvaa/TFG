@@ -67,3 +67,15 @@ def update_or_create_root_folder(db: Session, name: str, route: str):
 
 def get_folder_by_id(db: Session, folder_id: int):
     return db.query(Folder).filter(Folder.Id == folder_id).first()
+
+def reset_all_tables(db: Session):
+    try:
+        db.query(Conversation).delete()
+        db.query(Resumen).delete()
+        db.query(Character).delete()
+        db.query(Folder).delete()
+        db.commit()
+        return True
+    except Exception as e:
+        db.rollback()
+        raise e
