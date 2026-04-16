@@ -22,19 +22,90 @@ os.makedirs(INDEX_DIR, exist_ok=True)
 EPOCHS = [d for d in os.listdir(DATA_DIR) if os.path.isdir(os.path.join(DATA_DIR, d))]
 
 model = SentenceTransformer("sentence-transformers/all-mpnet-base-v2")
-def eliminar_todos_los_indices():
-    print("Eliminando todos los índices...")
+def crear_o_actualizar_indice_personaje(personaje_name: str, pregunta: str, respuesta: str):
+    """
+    Guarda la interacción literal (Usuario + NPC) en el índice FAISS y en JSON.
+    """
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    CHARACTERS_DIR = os.path.join(BASE_DIR, "characters")
+    os.makedirs(CHARACTERS_DIR, exist_ok=True)
 
+    try:
+        index_path = os.path.join(CHARACTERS_DIR, f"personaje_{personaje_name}.index")
+        docs_path = os.path.join(CHARACTERS_DIR, f"personaje_{personaje_name}_summaries.json")
+
+        timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        # Construir interacción literal
+        interaccion_literal = f"User: {pregunta}\nAssistant: {respuesta}"
+        nuevo_chunk = {
+            "User": pregunta,
+            "Assistant": respuesta,
+            "timestamp": timestamp
+        }
+
+        # Crear embedding de la interacción completa
+        embedding_nuevo = model.encode([interaccion_literal], convert_to_numpy=True, normalize_embeddings=True)
+
+        # Cargar o crear índice FAISS
+        if os.path.exists(index_path):
+            index = faiss.read_index(index_path)
+        else:
+            index = faiss.IndexFlatIP(embedding_nuevo.shape[1])
+
+        index.add(embedding_nuevo.astype("float32"))
+        faiss.write_index(index, index_path)
+
+        # Guardar en JSON
+        if os.path.exists(docs_path):
+            with open(docs_path, "r", encoding="utf-8") as f:
+                documentos = json.load(f)
+        else:
+            documentos = []
+
+        documentos.append(nuevo_chunk)
+
+        with open(docs_path, "w", encoding="utf-8") as f:
+            json.dump(documentos, f, ensure_ascii=False, indent=2)
+
+        print(f"✅ Interacción guardada en índice y JSON para '{personaje_name}'")
+
+    except Exception:
+        print("❌ ERROR en guardar_interaccion_personaje:")
+        traceback.print_exc()
+
+# =====================================================================================================================
+#                                             FAISS MUNDO
+# =====================================================================================================================
+
+def eliminar_todos_los_indices():
+    print("Eliminando todos los índices del mundo y personajes...")
+
+    # === Eliminar índices del mundo (épocas) ===
     for archivo in os.listdir(INDEX_DIR):
         if archivo.endswith(".index") or archivo.endswith("_docs.json"):
             ruta_archivo = os.path.join(INDEX_DIR, archivo)
             try:
                 os.remove(ruta_archivo)
-                print(f"Eliminado: {archivo}")
+                print(f"🗑️ Eliminado (mundo): {archivo}")
             except Exception as e:
-                print(f"Error al eliminar {archivo}: {e}")
+                print(f"⚠️ Error al eliminar {archivo}: {e}")
 
-    print("impieza completa.")
+    # === Eliminar índices de personajes ===
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    CHARACTERS_DIR = os.path.join(BASE_DIR, "characters")
+
+    if os.path.exists(CHARACTERS_DIR):
+        for archivo in os.listdir(CHARACTERS_DIR):
+            if archivo.endswith(".index") or archivo.endswith("_summaries.json"):
+                ruta_archivo = os.path.join(CHARACTERS_DIR, archivo)
+                try:
+                    os.remove(ruta_archivo)
+                    print(f"🗑️ Eliminado (personaje): {archivo}")
+                except Exception as e:
+                    print(f"⚠️ Error al eliminar {archivo}: {e}")
+
+    print("✅ Limpieza completa de índices y personajes.")
 def eliminar_saltos_de_linea(texto):
     # Reemplaza los saltos de línea dentro del texto por un espacio
     texto_sin_saltos = "".join(texto.splitlines())
@@ -119,9 +190,6 @@ def cargar_textos_de_epoca(epoca_path):
 
     return documentos
 
-# =======================
-#
-# =======================
 def crear_indice_si_no_existe(epoca, documentos):
     index_path = os.path.join(INDEX_DIR, f"{epoca}.index")
     docs_path = os.path.join(INDEX_DIR, f"{epoca}_docs.json")
@@ -143,86 +211,9 @@ def crear_indice_si_no_existe(epoca, documentos):
         json.dump(documentos, f, ensure_ascii=False, indent=2)
 
     print(f"🧠 Guardado índice y documentos para '{epoca}' en {INDEX_DIR}/")
-
-
-# =======================
-#
-# =======================
-def _log_personaje(personajes_dir: str, personaje_name: str, mensaje: str):
-    """
-    Escribe una línea en el log del personaje con timestamp.
-    """
-    os.makedirs(personajes_dir, exist_ok=True)
-    log_path = os.path.join(personajes_dir, f"personaje_{personaje_name}.log")
-    timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-    try:
-        with open(log_path, "a", encoding="utf-8") as f:
-            f.write(f"[{timestamp}] {mensaje}\n")
-    except Exception:
-        # Si el log falla, no interrumpe el flujo (pero podrías querer manejarlo)
-        pass
-
-def crear_o_actualizar_indice_personaje(personaje_name: str, str_resumen: str):
-    """
-        Añade el resumen (str_resumen) al índice semántico del personaje.
-        Si ya existe el índice, lo actualiza rápidamente añadiendo el nuevo embedding.
-        Si no existe, crea uno nuevo con este resumen.
-        Además, guarda todos los resúmenes en un archivo JSON.
-        """
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    CHARACTERS_DIR = os.path.join(BASE_DIR, "characters")
-    os.makedirs(CHARACTERS_DIR, exist_ok=True)
-
-    try:
-        os.makedirs(CHARACTERS_DIR, exist_ok=True)
-
-        index_path = os.path.join(CHARACTERS_DIR, f"personaje_{personaje_name}.index")
-        docs_path = os.path.join(CHARACTERS_DIR, f"personaje_{personaje_name}_summaries.json")
-
-        time22 = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-        nuevo_chunk = {
-            "text": str_resumen,
-            "timestamp": time22
-        }
-
-        # Crear embedding
-        embedding_nuevo = model.encode([str_resumen], convert_to_numpy=True, normalize_embeddings=True)
-
-        # Cargar o crear índice FAISS
-        if os.path.exists(index_path):
-            index = faiss.read_index(index_path)
-        else:
-            index = faiss.IndexFlatIP(embedding_nuevo.shape[1])
-
-        index.add(embedding_nuevo.astype("float32"))
-        faiss.write_index(index, index_path)
-
-        # Guardar resumen en JSON
-        if os.path.exists(docs_path):
-            with open(docs_path, "r", encoding="utf-8") as f:
-                documentos = json.load(f)
-        else:
-            documentos = []
-
-        documentos.append(nuevo_chunk)
-
-        with open(docs_path, "w", encoding="utf-8") as f:
-            json.dump(documentos, f, ensure_ascii=False, indent=2)
-
-        # Guardar log
-        log_path = os.path.join(personajes_dir, f"personaje_{personaje_name}.log")
-        with open(log_path, "a", encoding="utf-8") as f:
-            f.write(f"[{time22}] Añadido resumen: {str_resumen}\n")
-
-        print(f"✅ Índice y JSON actualizados para '{personaje_name}'")
-
-    except Exception:
-        print("❌ ERROR en crear_o_actualizar_indice_personaje:")
-        traceback.print_exc()
-
-# =======================
-#
-# =======================
+#==============
+#  TESTING
+#==============
 def construir_todos_los_indices():
     for epoca in EPOCHS:
         epoca_path = os.path.join(DATA_DIR, epoca)
@@ -232,6 +223,10 @@ def construir_todos_los_indices():
         else:
             print(f"⚠️ No se encontraron documentos en {epoca_path}")
 
+
+#==============
+#  REAL USED
+#==============
 def construir_todos_los_indices_Unity(rootPath):
     if not os.path.exists(rootPath):
         print(f"Ruta no encontrada: {rootPath}")
