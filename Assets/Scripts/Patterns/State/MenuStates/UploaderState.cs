@@ -93,9 +93,11 @@ public class UploaderState : AbstractMenuState
         contentPanel = PanelArchivos.Find("Scroll View").Find("Viewport").Find("Content").GetComponent<RectTransform>();
 
         //INTERACTUABLES
-        Retroceder = PanelArchivos.Find("Retroceder").GetComponent<Button>();
+        Retroceder = SubirArchivosRoot.Find("Retroceder").GetComponent<Button>();
+        Retroceder.gameObject.SetActive(true);
 
-        Save = PanelArchivos.Find("Guardar").GetComponent<Button>();
+        Save = SubirArchivosRoot.Find("Guardar").GetComponent<Button>();
+        Save.gameObject.SetActive(true);
         Save.onClick.AddListener(saveChanges);
 
         PathText = PanelArchivos.Find("RutaInputField").GetComponent<TextMeshProUGUI>();
@@ -103,8 +105,9 @@ public class UploaderState : AbstractMenuState
         Atras = PanelArchivos.Find("Atrás").GetComponent<Button>();
         Atras.onClick.AddListener(GoBack);
 
-        SubirArchivos = PanelArchivos.Find("SubirArchivosButt").GetComponent<Button>();
+        SubirArchivos = SubirArchivosRoot.Find("SubirArchivosButt").GetComponent<Button>();
         SubirArchivos.onClick.AddListener(UploadFile);
+        SubirArchivos.gameObject.SetActive(true);
 
         Retroceder.onClick.AddListener(() =>
         {
@@ -144,6 +147,10 @@ public class UploaderState : AbstractMenuState
         Atras.onClick.RemoveAllListeners();
 
         SubirArchivos.onClick.RemoveAllListeners();
+
+        Save.gameObject.SetActive(false);
+        Retroceder.gameObject.SetActive(false);
+        SubirArchivos.gameObject.SetActive(false);
     }
 
     public override void FixedUpdate()
