@@ -42,7 +42,6 @@ public class UploaderState : AbstractMenuState
 
     //CargandoContexto
     public GameObject CreandoContextoPanel; //FileButtonPrefab
-    bool entrenando = false;
 
     // Icon variable
     [Header("Iconos")]
