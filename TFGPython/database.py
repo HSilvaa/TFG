@@ -3,15 +3,15 @@ from sqlalchemy.orm import sessionmaker
 import os
 from schemas import Base
 
-# Ajusta esta ruta a la que usa tu Unity
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 
-project_root = os.path.dirname(current_dir)
-db_folder = os.path.join(project_root, "BasesDeDatos")
+
+db_folder = os.path.join(current_dir, "BasesDeDatos")
 
 if not os.path.exists(db_folder):
     os.makedirs(db_folder)
+    print(f"LOG: Carpeta de base de datos creada en: {db_folder}")
 
 DB_NAME = "TFG_DataBase.db"
 DB_PATH = os.path.normpath(os.path.join(db_folder, DB_NAME))

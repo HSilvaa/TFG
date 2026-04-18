@@ -9,7 +9,6 @@ import sys
 
 import crud
 import database
-import schemas
 from faiss_index_builder import crear_o_actualizar_indice_personaje
 
 sys.stdout.reconfigure(line_buffering=True)

@@ -1,16 +1,12 @@
-import os
 import sys
 import traceback
 from fastapi import FastAPI, HTTPException, Depends
 from pydantic import BaseModel
-from typing import List
 from sqlalchemy.orm import Session
 
-# Importamos tu lógica de RAG y base de datos
 import crud
-import schemas
 import database
-from FaissTry18_04 import obtener_contexto_mas_relevante, interactuar, resumir
+from FaissTry18_04 import interactuar, resumir
 from faiss_index_builder import construir_todos_los_indices_Unity, eliminar_todos_los_indices
 
 # Configuración de salida

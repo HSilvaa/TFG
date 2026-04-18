@@ -1,0 +1,27 @@
+# Usamos una imagen de Python ligera
+FROM python:3.10-slim
+
+# Evita que Python genere archivos .pyc y permite ver logs en tiempo real
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# Instalamos dependencias del sistema necesarias para FAISS y compilación
+RUN apt-get update && apt-get install -y \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Establecemos el directorio de trabajo dentro del contenedor
+WORKDIR /app
+
+# Copiamos el archivo de dependencias e instalamos
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copiamos todo el contenido de la carpeta actual al contenedor
+COPY . .
+
+# Exponemos el puerto que usa FastAPI
+EXPOSE 8000
+
+# Comando para arrancar el servidor
+CMD ["uvicorn", "APIPython:app", "--host", "0.0.0.0", "--port", "8000"]
