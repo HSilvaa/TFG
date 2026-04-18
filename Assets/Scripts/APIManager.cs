@@ -51,10 +51,13 @@ public class APIManager : MonoBehaviour
 
     // ========== MÉTODOS DE LA API ==========
 
-    public void UpdateRootFolder(string path)
+    public void UpdateRootFolder(string path, Action<string> onSuccess = null)
     {
         QueryText data = new QueryText { text = path };
-        StartCoroutine(PostRequest("/UpdateRootFolder", JsonUtility.ToJson(data)));
+        StartCoroutine(PostRequest("/UpdateRootFolder", JsonUtility.ToJson(data), (json) => {
+            // Aquí podrías deserializar la respuesta si fuera necesario
+            onSuccess?.Invoke(json);
+        }));
     }
 
     public void CreateCharacter(string name, string age, string desc, string epoca, Action<int> onSuccess = null)

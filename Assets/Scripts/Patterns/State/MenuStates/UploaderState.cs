@@ -48,7 +48,7 @@ public class UploaderState : AbstractMenuState
     private Dictionary<string, Sprite> iconDictionary;
 
     // Rutas
-    string rootFolder = Path.Combine(Application.persistentDataPath, "UploadedFiles");
+    string rootFolder = Path.Combine(Application.dataPath, "UploadedFiles");
 
     private APIManager api;
 
@@ -283,21 +283,24 @@ public class UploaderState : AbstractMenuState
 
             return; // Cancelar el guardado si hay archivos inválidos
         }
+        notifManager.ShowNotification("Entrenando con archivos...", Color.yellow, 5f);
 
-        // Guardar cambios en la base de datos
-        api.UpdateRootFolder(rootFolder);
-
-        notifManager.ShowNotification("Entrenando con archivos en la ruta ../UploadedFiles", Color.yellow, 5f);
-
-        showCreandoContextoPanel();
-
-        string respuesta = await ServiceLocatorManager.RunServiceWithResultAsync<CreateContext, string>(rootFolder);
-
-        if (respuesta.Equals("True"))
+        try
         {
-            await Task.Delay(2000);
-            CancelarContextoPanel(false);
+            api.ResetDatabase(); //Borrar BD
+            api.UpdateRootFolder(rootFolder, (json) => {
+                Debug.Log("Servidor finalizó el entrenamiento.");
+                CancelarContextoPanel(false);
+            });
+
+            showCreandoContextoPanel();
         }
+        catch(Exception e)
+        {
+            Debug.LogError($"Error en el proceso de guardado: {e.Message}");
+            CancelarContextoPanel(true);
+        }
+
     }
 
     private void showCreandoContextoPanel()
@@ -319,7 +322,6 @@ public class UploaderState : AbstractMenuState
         else
         {
             notifManager.ShowNotification("Entrenamiento completado", Color.green, 5f);
-
         }
 
         foreach (Transform child in CreandoContextoPanel.transform)
@@ -515,26 +517,6 @@ public class UploaderState : AbstractMenuState
                 }
             }
         }
-
-        // Subir carpetas
-        //var folders = StandaloneFileBrowser.OpenFolderPanel("Selecciona carpetas", "", true);
-        //foreach (string folder in folders)
-        //{
-        //    if (!string.IsNullOrEmpty(folder))
-        //    {
-        //        string folderName = Path.GetFileName(folder);
-        //        string destFolder = Path.Combine(CurrentFolder, folderName);
-        //        try
-        //        {
-        //            CopyFolderRecursive(folder, destFolder);
-        //            Debug.Log($"Carpeta subida: {folder} → {destFolder}");
-        //        }
-        //        catch (IOException ex)
-        //        {
-        //            Debug.LogError($"Error al copiar carpeta {folder}: {ex.Message}");
-        //        }
-        //    }
-        //}
 
         RefreshView();
 #endif
