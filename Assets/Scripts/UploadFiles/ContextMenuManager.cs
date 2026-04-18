@@ -210,8 +210,6 @@ public class ContextMenuManager : MonoBehaviour
         copiarBtn.interactable = isFileOrFolder;
         renombrarBtn.interactable = isFileOrFolder;
 
-        // Crear carpeta y Pegar son acciones de "lugar", siempre permitidas 
-        // (Pegar depende de si hay algo en el portapapeles)
         crearCarpetaBtn.interactable = true;
         pegarBtn.interactable = !string.IsNullOrEmpty(copiedPath);
 
@@ -418,22 +416,6 @@ public class ContextMenuManager : MonoBehaviour
         }
 
         return newPath;
-    }
-
-    void CreateNewFolder()
-    {
-        string newFolderPath = Path.Combine(currentFolder, "NuevaCarpeta");
-        int count = 1;
-        while (Directory.Exists(newFolderPath))
-            newFolderPath = Path.Combine(currentFolder, "NuevaCarpeta" + count++);
-
-        Directory.CreateDirectory(newFolderPath);
-
-        HideMenu();
-        OnRefreshRequested?.Invoke();
-
-        // Esperamos un frame para que el botón aparezca antes de pedir que se renombre
-        StartCoroutine(InvokeRenameOnNextFrame(newFolderPath));
     }
 
     System.Collections.IEnumerator InvokeRenameOnNextFrame(string folderPath)
