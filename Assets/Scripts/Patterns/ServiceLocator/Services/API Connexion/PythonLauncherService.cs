@@ -12,12 +12,11 @@ public class PythonLauncherService : IServiceResult<bool>
     public bool Result { get; private set; }
 
     public Process pythonProcess;
-    private string serverUrl = "http://127.0.0.1:8000/status";
 
-    private static readonly HttpClient httpClient = new HttpClient();
-
+    private APIManager api; 
     public async Task<bool> OpenServiceAsync()
     {
+        api = GameObject.FindObjectOfType<APIManager>();
         await KillProccess(); //mate a cualquier proceso antes por si acaso
         return true;
     }
@@ -86,35 +85,34 @@ public class PythonLauncherService : IServiceResult<bool>
     /// </summary>
     /// <param name="timeoutSeconds">Seconds trying to open the service</param>
     /// <returns></returns>
-    private async Task<bool> WaitForServerAsync(int timeoutSeconds = 200)
+    private async Task<bool> WaitForServerAsync(int timeoutSeconds = 30)
     {
-        var timeout = TimeSpan.FromSeconds(timeoutSeconds);
-        var startTime = DateTime.Now;
+        float currentTime = 0;
 
-        while ((DateTime.Now - startTime) < timeout)
+        UnityEngine.Debug.Log("Esperando a que el servidor Python despierte...");
+
+        while (currentTime < timeoutSeconds)
         {
-            try
+            var tcs = new TaskCompletionSource<bool>();
+
+            // Llamamos al CheckStatus del APIManager
+            api.CheckStatus((success) => {
+                tcs.TrySetResult(success);
+            });
+
+            bool isReady = await tcs.Task;
+
+            if (isReady)
             {
-                HttpResponseMessage response = await httpClient.GetAsync(serverUrl); //Intenta acceder a mi api /status
-                if (response.IsSuccessStatusCode)
-                {
-                    string responseBody = await response.Content.ReadAsStringAsync(); //Si contiene "status : ok" 
-                    if (responseBody.Contains("\"status\":\"ok\""))
-                    {
-                        Result = true;
-                        return true;
-                    }
-                }
-            }
-            catch (HttpRequestException)
-            {
-                // Servidor aún no está disponible
+                Result = true;
+                return true;
             }
 
             await Task.Delay(1000);
+            currentTime++;
         }
 
-        UnityEngine.Debug.LogError("Tiempo de espera agotado. El servidor no respondió correctamente.");
+        UnityEngine.Debug.LogError("Timeout: El servidor Python nunca respondió en el puerto 8000.");
         return false;
     }
 
@@ -139,17 +137,6 @@ public class PythonLauncherService : IServiceResult<bool>
     {
         try
         {
-            //Muy duro, mata a todos los procesos de python --> problema si el usuario tiene otro de python abierto while running the app
-            /*if (pythonProcess != null && !pythonProcess.HasExited)
-            {
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = "taskkill",
-                    Arguments = "/F /IM python.exe /T",
-                    CreateNoWindow = true,
-                    UseShellExecute = false
-                });
-            }*/
             Process killProcess = new Process
             {
                 StartInfo = new ProcessStartInfo

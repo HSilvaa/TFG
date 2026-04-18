@@ -135,6 +135,21 @@ public class APIManager : MonoBehaviour
         }));
     }
 
+    public void CheckStatus(Action<bool> onResult)
+    {
+        StartCoroutine(GetRequest("/status", (json) => {
+            if (json.Contains("\"status\":\"ok\""))
+            {
+                onResult?.Invoke(true);
+            }
+            else
+            {
+                onResult?.Invoke(false);
+            }
+        }));
+    }
+
+
 
     // ========== MOTORES DE PETICIÓN ==========
 
@@ -150,7 +165,7 @@ public class APIManager : MonoBehaviour
         }
         else
         {
-            Debug.LogError($"❌ Error en DELETE {endpoint}: " + request.error);
+            Debug.LogError($"Error en DELETE {endpoint}: " + request.error);
         }
     }
 
@@ -186,7 +201,12 @@ public class APIManager : MonoBehaviour
         }
         else
         {
-            Debug.LogError($"Error en GET {endpoint}: " + request.error);
+            if (endpoint != "/status")
+            {
+                Debug.LogError($"Error en GET {endpoint}: {request.error}");
+            }
+
+            callback?.Invoke("");
         }
     }
 

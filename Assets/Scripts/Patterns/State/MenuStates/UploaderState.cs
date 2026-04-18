@@ -48,7 +48,7 @@ public class UploaderState : AbstractMenuState
     private Dictionary<string, Sprite> iconDictionary;
 
     // Rutas
-    string rootFolder = Path.Combine(Application.dataPath, "UploadedFiles");
+    string rootFolder = Path.Combine(Application.persistentDataPath, "UploadedFiles");
 
     private APIManager api;
 
@@ -287,13 +287,16 @@ public class UploaderState : AbstractMenuState
 
         try
         {
+            showCreandoContextoPanel();
+
             api.ResetDatabase(); //Borrar BD
+
+            await Task.Delay(5000);
+
             api.UpdateRootFolder(rootFolder, (json) => {
                 Debug.Log("Servidor finalizó el entrenamiento.");
                 CancelarContextoPanel(false);
             });
-
-            showCreandoContextoPanel();
         }
         catch(Exception e)
         {

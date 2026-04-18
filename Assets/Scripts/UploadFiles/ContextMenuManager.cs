@@ -196,7 +196,6 @@ public class ContextMenuManager : MonoBehaviour
     void UpdateCurrentFolder(string newPath)
     {
         currentFolder = newPath;
-        Debug.Log("ContextMenuManager recibió nueva ruta: " + currentFolder);
 
         pegarBtn.interactable = !string.IsNullOrEmpty(copiedPath);
     }
