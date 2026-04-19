@@ -17,6 +17,8 @@ app = FastAPI(title="AIGERIM AI API")
 # Inicializar Base de Datos (Crea tablas si no existen)
 database.init_db()
 
+
+
 # ========== MODELOS DE PETICIÓN (Pydantic) ==========
 
 class QueryText(BaseModel):

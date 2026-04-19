@@ -5,22 +5,25 @@ FROM python:3.10-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# Instalamos dependencias del sistema necesarias para FAISS y compilación
+# Instalamos dependencias del sistema necesarias (importante para FAISS)
 RUN apt-get update && apt-get install -y \
     libgomp1 \
+    libopenblas-dev \
+    libomp-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Establecemos el directorio de trabajo dentro del contenedor
+# Establecemos el directorio de trabajo
 WORKDIR /app
 
-# Copiamos el archivo de dependencias e instalamos
+# Copiamos el archivo de dependencias e instalamos [cite: 2]
 COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copiamos todo el contenido de la carpeta actual al contenedor
 COPY . .
 
-# Exponemos el puerto que usa FastAPI
+# Exponemos el puerto [cite: 3]
 EXPOSE 8000
 
 # Comando para arrancar el servidor
