@@ -75,7 +75,6 @@ public class NewGameState : AbstractMenuState
 
     private void FillWithEpochs(string rootPath)
     {
-        // Validación: si el servidor no tiene ruta o no existe localmente
         if (string.IsNullOrEmpty(rootPath) || !Directory.Exists(rootPath))
         {
             Debug.LogError("La ruta del servidor no es accesible localmente: " + rootPath);
@@ -84,7 +83,6 @@ public class NewGameState : AbstractMenuState
 
         try
         {
-            // Obtener las carpetas (Épocas)
             var directories = Directory.GetDirectories(rootPath);
             List<string> folderNames = directories
                 .Select(dir => Path.GetFileName(dir))

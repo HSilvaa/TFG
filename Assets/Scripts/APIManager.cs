@@ -53,56 +53,67 @@ public class APIManager : MonoBehaviour
 
     public void UpdateRootFolder(string path, Action<string> onSuccess = null)
     {
-        QueryText data = new QueryText { text = path };
-        StartCoroutine(PostRequest("/UpdateRootFolder", JsonUtility.ToJson(data), (json) => {
-            // Aquí podrías deserializar la respuesta si fuera necesario
-            onSuccess?.Invoke(json);
-        }));
+        try
+        {
+            QueryText data = new QueryText { text = path };
+            StartCoroutine(PostRequest("/UpdateRootFolder", JsonUtility.ToJson(data), (json) => {
+                onSuccess?.Invoke(json);
+            }));
+        }
+        catch (Exception e) { }
     }
 
     public void CreateCharacter(string name, string age, string desc, string epoca, Action<int> onSuccess = null)
     {
-        CharacterData data = new CharacterData { Name = name, Age = age, Description = desc, Epoca = epoca };
-        StartCoroutine(PostRequest("/characters", JsonUtility.ToJson(data), (json) => {
-            var res = JsonUtility.FromJson<ResponseStatus>(json);
-            onSuccess?.Invoke(res.id);
-        }));
+        try
+        {
+            CharacterData data = new CharacterData { Name = name, Age = age, Description = desc, Epoca = epoca };
+            StartCoroutine(PostRequest("/characters", JsonUtility.ToJson(data), (json) => {
+                var res = JsonUtility.FromJson<ResponseStatus>(json);
+                onSuccess?.Invoke(res.id);
+            }));
+        }
+        catch (Exception e) { }
     }
 
     public void GetAllCharacters(Action<List<CharacterData>> onSuccess)
     {
-        StartCoroutine(GetRequest("/characters", (json) => {
-            string newJson = "{ \"items\": " + json + "}";
-            Wrapper<CharacterData> wrapper = JsonUtility.FromJson<Wrapper<CharacterData>>(newJson);
-            onSuccess?.Invoke(wrapper.items);
-        }));
+        try
+        {
+            StartCoroutine(GetRequest("/characters", (json) =>
+            {
+                string newJson = "{ \"items\": " + json + "}";
+                Wrapper<CharacterData> wrapper = JsonUtility.FromJson<Wrapper<CharacterData>>(newJson);
+                onSuccess?.Invoke(wrapper.items);
+            }));
+        }
+        catch (Exception e) { }
     }
 
     public void SendChatMessage(string msg, int charId, Action<string> onReply)
     {
-        MessageRequest data = new MessageRequest { message = msg, id = charId };
-        StartCoroutine(PostRequest("/send", JsonUtility.ToJson(data), (json) => {
-            var res = JsonUtility.FromJson<ResponseString>(json);
-            onReply?.Invoke(res.response);
-        }));
+        try
+        {
+            MessageRequest data = new MessageRequest { message = msg, id = charId };
+            StartCoroutine(PostRequest("/send", JsonUtility.ToJson(data), (json) => {
+                var res = JsonUtility.FromJson<ResponseString>(json);
+                onReply?.Invoke(res.response);
+            }));
+        }
+        catch (Exception e) { }
     }
 
     public void GetConversations(int charId, Action<List<string>> onSuccess)
     {
-        StartCoroutine(GetRequest($"/conversations/{charId}", (json) => {
-            string newJson = "{ \"items\": " + json + "}";
-            Wrapper<string> wrapper = JsonUtility.FromJson<Wrapper<string>>(newJson);
-            onSuccess?.Invoke(wrapper.items);
-        }));
-    }
-
-    public void Summarize(string history, string charName, Action<string> onDone)
-    {
-        HistorialText data = new HistorialText { historial = history, characterName = charName };
-        StartCoroutine(PostRequest("/resumir", JsonUtility.ToJson(data), (json) => {
-            var res = JsonUtility.FromJson<ResponseResumen>(json);
-            onDone?.Invoke(res.resumen);
-        }));
+        try
+        {
+            StartCoroutine(GetRequest($"/conversations/{charId}", (json) => {
+                string newJson = "{ \"items\": " + json + "}";
+                Wrapper<string> wrapper = JsonUtility.FromJson<Wrapper<string>>(newJson);
+                onSuccess?.Invoke(wrapper.items);
+            }));
+        }
+        catch (Exception e) { }
     }
 
     public void ResetDatabase()
@@ -112,41 +123,57 @@ public class APIManager : MonoBehaviour
 
     public void GetRootFolder(Action<string> onSuccess)
     {
-        // Llamamos al endpoint que devuelve la carpeta con ID 1
-        StartCoroutine(GetRequest("/folders/1", (json) => {
-            // Deserializamos usando FolderData, que SÍ tiene el campo Route
-            var folder = JsonUtility.FromJson<FolderData>(json);
+        try
+        {
+            StartCoroutine(GetRequest("/folders/1", (json) => {
+                if (string.IsNullOrEmpty(json))
+                {
+                    onSuccess?.Invoke("");
+                    return;
+                }
 
-            if (folder != null && !string.IsNullOrEmpty(folder.Route))
-            {
-                onSuccess?.Invoke(folder.Route);
-            }
-            else
-            {
-                Debug.LogError("La respuesta del servidor no contiene una ruta válida.");
-            }
-        }));
+                var folder = JsonUtility.FromJson<FolderData>(json);
+
+                if (folder != null && !string.IsNullOrEmpty(folder.Route))
+                {
+                    onSuccess?.Invoke(folder.Route);
+                }
+                else
+                {
+                    onSuccess?.Invoke("");
+                }
+            }));
+        }
+        catch (Exception e) { }
     }
     public void DeleteCharacter(int charId, Action onSuccess)
     {
-        // Usamos el método DELETE
-        StartCoroutine(DeleteRequest($"/characters/{charId}", (json) => {
+        try
+        {
+            StartCoroutine(DeleteRequest($"/characters/{charId}", (json) => {
             onSuccess?.Invoke();
-        }));
+            }));
+        }
+        catch (Exception e) { }
     }
 
     public void CheckStatus(Action<bool> onResult)
     {
-        StartCoroutine(GetRequest("/status", (json) => {
-            if (json.Contains("\"status\":\"ok\""))
-            {
-                onResult?.Invoke(true);
-            }
-            else
-            {
-                onResult?.Invoke(false);
-            }
-        }));
+        try
+        {
+            StartCoroutine(GetRequest("/status", (json) => {
+                if (json.Contains("\"status\":\"ok\""))
+                {
+                    onResult?.Invoke(true);
+                }
+                else
+                {
+                    onResult?.Invoke(false);
+                }
+            }));
+        }
+        catch (Exception e) { }
+
     }
 
 
@@ -209,7 +236,5 @@ public class APIManager : MonoBehaviour
             callback?.Invoke("");
         }
     }
-
-    // Helper para listas JSON
     [Serializable] private class Wrapper<T> { public List<T> items; }
 }

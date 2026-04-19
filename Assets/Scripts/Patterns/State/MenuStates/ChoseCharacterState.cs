@@ -14,43 +14,60 @@ public class ChoseCharacterState : AbstractMenuState
     private Button contextButt;
 
     AbstractMenuState newState;
+    private APIManager api;
+    NotificationManager notifManager;
+
+
     public ChoseCharacterState(IMenuState menu) : base(menu)
     {
+        api = GameObject.FindObjectOfType<APIManager>();
+        notifManager = GameObject.FindObjectOfType<NotificationManager>();
     }
     public async override void Enter()
     {
         CreateContinue = GameObject.Find("NewContinueThings").transform;
         newButt = CreateContinue.Find("New").GetComponent<Button>();
-
         continueButt = CreateContinue.Find("Continue").GetComponent<Button>();
-
         contextButt = CreateContinue.Find("CrearContexto").GetComponent<Button>();
 
-        //Poner como ultimo hijo para que se pueda clickar bien
         CreateContinue.transform.SetAsLastSibling();
-
         Event.RaiseMenuChanged();
-
         TransicionEnter();
 
-        newButt.onClick.AddListener(() =>
-        {
-            newState = new NewGameState(menu);
-            TransicionExit();
+        newButt.interactable = true;
+        continueButt.interactable = true;
+        contextButt.interactable = true;
+
+        newButt.onClick.AddListener(() => {
+            CheckIfContextIsCreated();
         });
 
-        continueButt.onClick.AddListener(() =>
-        {
+        continueButt.onClick.AddListener(() => {
             newState = new ContinueGameState(menu);
             TransicionExit();
         });
 
-        contextButt.onClick.AddListener(() =>
-        {
+        contextButt.onClick.AddListener(() => {
             newState = new UploaderState(menu);
             TransicionExit();
         });
+    }
 
+    private void CheckIfContextIsCreated()
+    {
+        api.GetRootFolder((rutaServidor) => {
+            if (string.IsNullOrEmpty(rutaServidor))
+            {
+                Debug.LogWarning("Contexto no detectado (Ruta vacía o error de red)");
+                notifManager.ShowNotification("Context not created yet", Color.red, 2f);
+            }
+            else
+            {
+                Debug.Log("Contexto detectado: " + rutaServidor);
+                newState = new NewGameState(menu);
+                TransicionExit();
+            }
+        });
     }
 
     public override void Exit() //Reset por si vuelve atrás

@@ -192,18 +192,17 @@ public class UploaderState : AbstractMenuState
     public async void saveChanges()
     {
         string[] allowedExts = new[] { ".txt", ".pdf", ".doc", ".docx" };
-        notifManager.ShowNotification("Comprobando...", Color.yellow, 0.5f);
+        notifManager.ShowNotification("Checking files...", Color.yellow, 0.5f);
         await Task.Delay(1000);
         // Obtener todas las carpetas y archivos en rootFolder
         var allDirectories = Directory.GetDirectories(rootFolder, "*", SearchOption.AllDirectories);
         var allFiles = Directory.GetFiles(rootFolder, "*", SearchOption.AllDirectories);
 
-        // Detectar carpetas anidadas (nivel 3 o más)
         var nestedFolders = allDirectories.Where(dir =>
         {
             string relativeDir = Path.GetRelativePath(rootFolder, dir);
             var parts = relativeDir.Split(Path.DirectorySeparatorChar);
-            return parts.Length >= 2; // Nivel 3 o más: parts.Length>=2 porque raíz no se cuenta, ejemplo: Carpeta1/Carpeta2 (2 partes)
+            return parts.Length >= 2; 
         }).ToList();
 
         if (nestedFolders.Count > 0)
@@ -211,12 +210,11 @@ public class UploaderState : AbstractMenuState
             foreach (var folder in nestedFolders)
             {
                 string shortPath = GetShortenedPath(folder, rootFolder);
-                notifManager.ShowNotification("Error: Subcarpetas no están permitidas" + shortPath, Color.red, 5f);
+                notifManager.ShowNotification("Error: Subfolders is not permitted" + shortPath, Color.red, 5f);
             }
-            return; // Cancelar guardado por carpeta anidada
+            return; 
         }
 
-        // Detectar archivos en nivel 3 o más (carpeta dentro de carpeta dentro de carpeta)
         var filesInRoot = allFiles.Where(file =>
         {
             string relativeFile = Path.GetRelativePath(rootFolder, file);
@@ -234,20 +232,18 @@ public class UploaderState : AbstractMenuState
                 GameObject btn = FindButtonByPath(file);
                 if (btn != null)
                 {
-                    // 1. Cambiamos el color base del componente Image (el fondo)
                     var btnImage = btn.GetComponent<UnityEngine.UI.Image>();
                     if (btnImage != null)
                     {
                         btnImage.color = Color.red;
                     }
 
-                    // 2. Opcional: Ajustar el ColorBlock para que al pasar el ratón no se vea raro
                     var btnComp = btn.GetComponent<Button>();
                     if (btnComp != null)
                     {
                         ColorBlock colors = btnComp.colors;
                         colors.normalColor = Color.red;
-                        colors.selectedColor = new Color(0.8f, 0f, 0f); // Rojo más oscuro al seleccionar
+                        colors.selectedColor = new Color(0.8f, 0f, 0f);
                         btnComp.colors = colors;
                     }
                 }
@@ -267,7 +263,7 @@ public class UploaderState : AbstractMenuState
                 GameObject btn = FindButtonByPath(filePath);
 
                 string shortenedPath = GetShortenedPath(filePath, rootFolder);
-                notifManager.ShowNotification("Archivo no compatible: " + shortenedPath, Color.red, 5f);
+                notifManager.ShowNotification("Files not valid: " + shortenedPath, Color.red, 5f);
 
                 if (btn != null)
                 {
@@ -283,7 +279,7 @@ public class UploaderState : AbstractMenuState
 
             return; // Cancelar el guardado si hay archivos inválidos
         }
-        notifManager.ShowNotification("Entrenando con archivos...", Color.yellow, 5f);
+        notifManager.ShowNotification("Saving context files...", Color.yellow, 5f);
 
         try
         {
@@ -320,11 +316,11 @@ public class UploaderState : AbstractMenuState
     {
         if (error)
         {
-            notifManager.ShowNotification("Entrenamiento Cancelado. Cambios no persistidos", Color.red, 5f);
+            notifManager.ShowNotification("Action canceled. Data NOT persisted", Color.red, 5f);
         }
         else
         {
-            notifManager.ShowNotification("Entrenamiento completado", Color.green, 5f);
+            notifManager.ShowNotification("Saving completed!", Color.green, 5f);
         }
 
         foreach (Transform child in CreandoContextoPanel.transform)

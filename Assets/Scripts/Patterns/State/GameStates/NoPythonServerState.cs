@@ -18,8 +18,12 @@ public class NoPythonServerState : AbstractGameControllerState
     private string serverUrl = "http://127.0.0.1:8000/status";
 
     private static readonly HttpClient httpClient = new HttpClient();
+    NotificationManager notifManager;
 
-    public NoPythonServerState(IGameState game) : base(game) { }
+    public NoPythonServerState(IGameState game) : base(game)
+    {
+        notifManager = GameObject.FindObjectOfType<NotificationManager>();
+    }
 
     public override void Enter()
     {
@@ -53,6 +57,11 @@ public class NoPythonServerState : AbstractGameControllerState
 
         if (isServerUp)
         {
+            if (isEmergencySet == true)
+            {
+                notifManager.ShowNotification("Connection With Python Server Established", Color.green, 5f);
+            }
+
             isEmergencySet = false;
             game.SetState(new NoProblemState(game));
         }
@@ -63,6 +72,7 @@ public class NoPythonServerState : AbstractGameControllerState
             if (!isEmergencySet)
             {
                 isEmergencySet = true;
+                notifManager.ShowNotification("No Connection With Python Server. Reconnecting...", Color.red, 5f);
             }
 
             bool launched = await TryLaunchPythonServer();

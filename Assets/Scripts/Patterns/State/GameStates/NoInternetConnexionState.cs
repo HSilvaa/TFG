@@ -13,9 +13,12 @@ public class NoInternetConnexionState : AbstractGameControllerState
     float checkTimer = 0f;
     bool isChecking = false;
     bool isEmergencySet = false;
+    NotificationManager notifManager;
+
 
     public NoInternetConnexionState(IGameState game) : base(game)
-    { 
+    {
+        notifManager = GameObject.FindObjectOfType<NotificationManager>();
     }
 
     public override void Enter()
@@ -55,13 +58,18 @@ public class NoInternetConnexionState : AbstractGameControllerState
 
             if (isOnline)
             {
-                //Debug.Log("Conexión restaurada. Cambiando de estado...");
+                if(isEmergencySet == true)
+                {
+                    notifManager.ShowNotification("Connection Established", Color.green, 5f);
+                }
+
                 isEmergencySet = false;
-                game.SetState(new NoPythonServerState(game)); // Goes over all possible emergencies --> ?? cuz some emergencies triggers in-user action
+                game.SetState(new NoPythonServerState(game)); // Goes over all possible emergencies
             }
             else if(!isEmergencySet)
             {
                 isEmergencySet = true;
+                notifManager.ShowNotification("No Internet Connection. Reconnecting...", Color.red, 5f);
                 Debug.Log("Sin conexión todavía...");
             }
 
