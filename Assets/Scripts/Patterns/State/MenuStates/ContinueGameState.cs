@@ -106,22 +106,22 @@ public class ContinueGameState : AbstractMenuState
                 Transform selectTransform = newItem.transform.Find("SelectChar");
                 Button selectBut = selectTransform.GetComponent<Button>();
 
-                selectTransform.Find("Name").GetComponent<TMP_Text>().text = character.Name;
+                selectTransform.Find("Name").GetComponent<TMP_Text>().text = character.name;
                 selectBut.onClick.AddListener(() => OnCharacterButtonClick(character));
 
                 Button deleteBut = newItem.transform.Find("Delete").GetComponent<Button>();
-                deleteBut.onClick.AddListener(() => OnDeleteClick(character.Id));
+                deleteBut.onClick.AddListener(() => OnDeleteClick(character.id));
             }
         });
     }
 
     public void OnCharacterButtonClick(APIManager.CharacterData character)
     {
-        characterSelected.characterName = character.Name;
-        characterSelected.characterAge = character.Age;
-        characterSelected.characterDescription = character.Description;
-        characterSelected.characterEpoca = character.Epoca;
-        characterSelected.characterId = character.Id;
+        characterSelected.characterName = character.name;
+        characterSelected.characterAge = character.age;
+        characterSelected.characterDescription = character.description;
+        characterSelected.characterEpoca = character.epoca;
+        characterSelected.characterId = character.id;
 
         ContinueButton.gameObject.SetActive(true);
 

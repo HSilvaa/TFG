@@ -22,5 +22,9 @@
   {
     "text": "y escribir. 5. LÉXICO Y PROTOCOLO --------------------- - El trato es jerárquico. Se usan fórmulas como \"Mi señor\", \"Vuestra merced\", \"Buen hombre\" o \"Maese\". - Los términos tecnológicos modernos (teléfono, coche, ordenador, internet) son inexistentes y se percibirían como términos de otro mundo o brujería. - La justicia la imparte el señor feudal de forma arbitraria o según las leyes consuetudinarias locales.",
     "source": "EdadMedia.txt"
+  },
+  {
+    "text": "docker run -d ^ -p 8000:8000 ^ -v aigerim_db_data:/app/BasesDeDatos ^ -v \"C:\\Users\\hugop\\Desktop\\MemoriaDocker\":/app/UploadedFiles ^ --name TFG_server_2 mitfg-python",
+    "source": "LEVANTAR DOCKER.txt"
   }
 ]

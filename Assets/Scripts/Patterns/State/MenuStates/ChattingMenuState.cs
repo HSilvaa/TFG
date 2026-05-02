@@ -2,15 +2,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
 using TMPro;
-using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.UI;
-using UnityEngine.UIElements;
-using static UnityEngine.RuleTile.TilingRuleOutput;
-using Button = UnityEngine.UI.Button;
-using Transform = UnityEngine.Transform;
 
 public class ChattingMenuState : AbstractMenuState
 {
@@ -25,15 +19,12 @@ public class ChattingMenuState : AbstractMenuState
 
     private string messageToSend;
 
-    public List<ChatMessage> historialConversacion = new List<ChatMessage>();
-
-    //Variables para la carga de mensajes 
+    // Variables para la gestión de mensajes (RAG/Historial)
     private List<ChatMessage> mensajesCargados = new List<ChatMessage>();
     private LinkedList<GameObject> mensajesVisibles = new LinkedList<GameObject>();
-    private int currentStartIndex = -1; // -1 hasta que se cargue
+    private int currentStartIndex = -1;
     private bool isLoading = false;
     private int MaxVisibleMessages = 20;
-
 
     [System.Serializable]
     public class ChatMessage
@@ -48,22 +39,15 @@ public class ChattingMenuState : AbstractMenuState
         }
     }
 
-    [System.Serializable]
-    public class Wrapper
-    {
-        public List<ChatMessage> conversacion;
-    }
-
     private AbstractMenuState state;
     private APIManager api;
+
     public ChattingMenuState(IMenuState menu) : base(menu)
     {
         api = GameObject.FindObjectOfType<APIManager>();
     }
-    /// <summary>
-    /// Obtiene referencias relevantes para el funcionamineto del estado
-    /// </summary>
-    public async override void Enter()
+
+    public override void Enter()
     {
         try
         {
@@ -77,19 +61,23 @@ public class ChattingMenuState : AbstractMenuState
             currentCharacter = GameObject.Find("ScriptableCharacter").GetComponent<HolderScriptable>().data;
 
             ChatThings.transform.SetAsLastSibling();
-            scroll.onValueChanged.AddListener(OnScrollValueChanged);
 
-            LoadCharacterConversationFromAPI();
+            // Limpieza inicial
+            ClearVisibleMessages();
+            mensajesCargados.Clear();
 
+            // Configuración de UI
             sendButt.gameObject.SetActive(true);
             backButt.gameObject.SetActive(true);
             messageField.gameObject.SetActive(true);
             scroll.gameObject.SetActive(true);
 
-            sendButt.onClick.AddListener(() =>
-            {
-                SendMessagePython();
-            });
+            scroll.onValueChanged.AddListener(OnScrollValueChanged);
+
+            // Cargar historial desde la nueva ruta de la API
+            LoadCharacterConversationFromAPI();
+
+            sendButt.onClick.AddListener(SendMessagePython);
 
             backButt.onClick.AddListener(() =>
             {
@@ -99,7 +87,7 @@ public class ChattingMenuState : AbstractMenuState
         }
         catch (Exception ex)
         {
-            Debug.LogError("Error en Enter: " + ex.Message);
+            Debug.LogError("Error en Enter ChattingState: " + ex.Message);
         }
     }
 
@@ -114,149 +102,90 @@ public class ChattingMenuState : AbstractMenuState
 
             foreach (var item in conversaciones)
             {
-                 string[] parts = item.Split(new[] { "\nAssistant: " }, StringSplitOptions.None);
-                 string userPart = parts[0].Replace("User: ", "");
-                 string assistantPart = parts.Length > 1 ? parts[1] : "";
+                // El servidor devuelve "User: ... \nAssistant: ..." o solo "User: ..."
+                // Usamos una partición más robusta para evitar errores si el string cambia
+                string[] separators = { "\nAssistant: ", "\nAssistant:", "Assistant: " };
+                string[] parts = item.Split(separators, StringSplitOptions.None);
 
-                 mensajesCargados.Add(new ChatMessage("user", userPart));
-                 if (!string.IsNullOrEmpty(assistantPart))
-                     mensajesCargados.Add(new ChatMessage("assistant", assistantPart));                
+                string userPart = parts[0].Replace("User: ", "").Trim();
+                string assistantPart = parts.Length > 1 ? parts[1].Trim() : "";
+
+                // Añadimos al historial local para la virtualización del scroll
+                mensajesCargados.Add(new ChatMessage("user", userPart));
+                if (!string.IsNullOrEmpty(assistantPart))
+                    mensajesCargados.Add(new ChatMessage("assistant", assistantPart));
             }
 
+            // Calculamos el índice para mostrar los últimos MaxVisibleMessages
             currentStartIndex = Mathf.Max(0, mensajesCargados.Count - MaxVisibleMessages);
+            if (currentStartIndex % 2 != 0) currentStartIndex--; // Asegurar que empezamos por un mensaje de Usuario
+
             LoadVisibleMessages();
             isLoading = false;
         });
     }
 
-    public override void Exit()
-    {
-
-    }
-
-    public override void FixedUpdate()
-    {
-    }
-
-    public override async void TransicionEnter()
-    {
-        //menu.SetState(state);
-    }
-
-    public override async void TransicionExit()
-    {
-        sendButt.gameObject.SetActive(false);
-        backButt.gameObject.SetActive(false);
-        messageField.gameObject.SetActive(false);
-
-        ClearVisibleMessages();
-        historialConversacion.Clear();
-
-        menu.SetState(state);
-    }
-
-    public override void Update()
-    {
-        if (scroll.verticalNormalizedPosition >= 0.98f)
-        {
-            TryLoadPreviousMessages();
-        }
-    }
-
-    /// <summary>
-    /// Conecta con OpenAI y muestra el mensaje por pantalla cambiando el color segun el rol
-    /// </summary>
-    private GameObject currentMessagePair;
     public void SendMessagePython()
     {
         messageToSend = messageField.text;
         if (string.IsNullOrEmpty(messageToSend)) return;
 
-        currentMessagePair = InstantiateMessagePair(messageToSend);
-
+        // Instanciamos el par visual (User: texto, Assistant: ...)
+        GameObject currentMessagePair = InstantiateMessagePair(messageToSend);
         messageField.text = "";
 
-        api.SendChatMessage(messageToSend, currentCharacter.characterId, (respuestaNPC) =>
+        // Petición a la nueva ruta jerárquica: /characters/{id}/chat
+        api.SendChatMessage(currentCharacter.characterId, messageToSend, (respuestaNPC) =>
         {
             if (!string.IsNullOrEmpty(respuestaNPC))
             {
+                // Limpiar comillas extras si las hay
                 respuestaNPC = respuestaNPC.Trim('\"');
 
                 FillAssistantResponse(currentMessagePair, respuestaNPC);
 
-                AddMessage("user", messageToSend);
-                AddMessage("assistant", respuestaNPC);
+                // Actualizamos la lista interna para el sistema de scroll
+                mensajesCargados.Add(new ChatMessage("user", messageToSend));
+                mensajesCargados.Add(new ChatMessage("assistant", respuestaNPC));
             }
         });
     }
-
 
     private GameObject InstantiateMessagePair(string userMsg)
     {
         GameObject newPair = GameObject.Instantiate(mensajePrefab, IAContainer.transform);
         newPair.SetActive(true);
 
-        TMP_Text userText = newPair.transform.Find("User").GetComponent<TMP_Text>();
-        TMP_Text assistantText = newPair.transform.Find("Assistant").GetComponent<TMP_Text>();
-
-        userText.text = userMsg;
-        assistantText.text = "...";
+        newPair.transform.Find("User").GetComponent<TMP_Text>().text = userMsg;
+        newPair.transform.Find("Assistant").GetComponent<TMP_Text>().text = "...";
 
         mensajesVisibles.AddLast(newPair);
-
         RefreshChatLayout();
         return newPair;
     }
 
-    /// <summary>
-    /// Rellena la parte del asistente en un prefab ya existente.
-    /// </summary>
     private void FillAssistantResponse(GameObject pair, string assistantMsg)
     {
         if (pair == null) return;
-
-        TMP_Text assistantText = pair.transform.Find("Assistant").GetComponent<TMP_Text>();
-        assistantText.text = assistantMsg;
-
+        pair.transform.Find("Assistant").GetComponent<TMP_Text>().text = assistantMsg;
         RefreshChatLayout();
     }
 
-    private void RefreshChatLayout()
-    {
-        Canvas.ForceUpdateCanvases();
-        LayoutRebuilder.ForceRebuildLayoutImmediate(IAContainer.GetComponent<RectTransform>());
-        scroll.verticalNormalizedPosition = 0f;
-    }
-
-    /// <summary>
-    /// Añade un mensaje a la lista dee conversaciones
-    /// </summary>
-    /// <param name="role">User/Assistant</param>
-    /// <param name="content">Convesation</param>
-    private void AddMessage(string role, string content)
-    {
-        historialConversacion.Add(new ChatMessage(role, content));
-    }
-
-    /// <summary>
-    /// Muestra los visibles (20 primeros)
-    /// </summary>
     private void LoadVisibleMessages()
     {
-        // Iteramos de 2 en 2 para llenar los pares (User + Assistant)
+        // El prefab gestiona User y Assistant internamente, así que iteramos de 2 en 2
         for (int i = currentStartIndex; i < mensajesCargados.Count; i += 2)
         {
-            ChatMessage userMsg = mensajesCargados[i];
+            if (mensajesCargados[i].role != "user") { i--; continue; } // Sincronización de roles
+
             GameObject go = GameObject.Instantiate(mensajePrefab, IAContainer.transform);
             go.SetActive(true);
 
-            go.transform.Find("User").GetComponent<TMP_Text>().text = userMsg.content;
+            go.transform.Find("User").GetComponent<TMP_Text>().text = mensajesCargados[i].content;
 
-            // Comprobamos si existe un mensaje de asistente después del de usuario
             if (i + 1 < mensajesCargados.Count)
             {
-                ChatMessage assistantMsg = mensajesCargados[i + 1];
-                go.transform.Find("Assistant").GetComponent<TMP_Text>().text = assistantMsg.content;
+                go.transform.Find("Assistant").GetComponent<TMP_Text>().text = mensajesCargados[i + 1].content;
             }
             else
             {
@@ -268,84 +197,71 @@ public class ChattingMenuState : AbstractMenuState
         RefreshChatLayout();
     }
 
-    private void ClearVisibleMessages()
-    {
-        foreach (var obj in mensajesVisibles)
-        {
-            GameObject.Destroy(obj);
-        }
-        mensajesVisibles.Clear();
-    }
-
-    /// <summary>
-    /// Metodo para instanciar los mensajes (similar to ShowMessage) but this one takes a ChatMessage as argument
-    /// </summary>
-    /// <param name="msg"></param>
-    /// <returns></returns>
-    private GameObject InstantiateMessage(ChatMessage msg)
-    {
-        Color color = msg.role == "user" ? Color.yellow : Color.green;
-
-        GameObject newMessage = GameObject.Instantiate(mensajePrefab, IAContainer.transform);
-        TMP_Text messageText = newMessage.GetComponentInChildren<TMP_Text>();
-
-        newMessage.SetActive(true);
-        messageText.text = msg.content;
-        messageText.color = color;
-
-        return newMessage;
-    }
-
-    /// <summary>
-    /// Cuando cambia el valor del scroll
-    /// </summary>
-    /// <param name="pos"></param>
-    private void OnScrollValueChanged(Vector2 pos)
-    {
-        if (isLoading) return;
-
-        if (pos.y >= 0.98f)
-        {
-            TryLoadPreviousMessages();
-        }
-    }
-
-    /// <summary>
-    /// Intenta cargar mensajes màs antiguos
-    /// </summary>
     private void TryLoadPreviousMessages()
     {
         if (isLoading || currentStartIndex <= 0) return;
-
         isLoading = true;
 
         int newStartIndex = Mathf.Max(0, currentStartIndex - MaxVisibleMessages);
+        if (newStartIndex % 2 != 0) newStartIndex--;
 
+        // Cargamos hacia atrás
         for (int i = currentStartIndex - 2; i >= newStartIndex; i -= 2)
         {
-            ChatMessage userMsg = mensajesCargados[i];
-            ChatMessage assistantMsg = (i + 1 < mensajesCargados.Count) ? mensajesCargados[i + 1] : null;
-
             GameObject go = GameObject.Instantiate(mensajePrefab, IAContainer.transform);
             go.SetActive(true);
 
-            go.transform.Find("User").GetComponent<TMP_Text>().text = userMsg.content;
-            TMP_Text assistantTMP = go.transform.Find("Assistant").GetComponent<TMP_Text>();
+            go.transform.Find("User").GetComponent<TMP_Text>().text = mensajesCargados[i].content;
 
-            if (assistantMsg != null)
-                assistantTMP.text = assistantMsg.content;
-            else
-                assistantTMP.text = "";
+            if (i + 1 < mensajesCargados.Count)
+                go.transform.Find("Assistant").GetComponent<TMP_Text>().text = mensajesCargados[i + 1].content;
 
-            go.transform.SetSiblingIndex(0);
-
+            go.transform.SetSiblingIndex(0); // Poner al principio del contenedor
             mensajesVisibles.AddFirst(go);
         }
 
         currentStartIndex = newStartIndex;
         isLoading = false;
 
+        // Mantener la posición del scroll para que no pegue saltos
         Canvas.ForceUpdateCanvases();
         LayoutRebuilder.ForceRebuildLayoutImmediate(IAContainer.GetComponent<RectTransform>());
     }
+
+    private void OnScrollValueChanged(Vector2 pos)
+    {
+        if (isLoading) return;
+        if (pos.y >= 0.99f) TryLoadPreviousMessages();
+    }
+
+    private void RefreshChatLayout()
+    {
+        Canvas.ForceUpdateCanvases();
+        LayoutRebuilder.ForceRebuildLayoutImmediate(IAContainer.GetComponent<RectTransform>());
+        scroll.verticalNormalizedPosition = 0f;
+    }
+
+    private void ClearVisibleMessages()
+    {
+        foreach (var obj in mensajesVisibles) if (obj != null) GameObject.Destroy(obj);
+        mensajesVisibles.Clear();
+    }
+
+    public override void TransicionExit()
+    {
+        sendButt.gameObject.SetActive(false);
+        backButt.gameObject.SetActive(false);
+        messageField.gameObject.SetActive(false);
+        scroll.onValueChanged.RemoveAllListeners();
+
+        ClearVisibleMessages();
+        mensajesCargados.Clear();
+
+        menu.SetState(state);
+    }
+
+    public override void Update() { }
+    public override void FixedUpdate() { }
+    public override void TransicionEnter() { }
+    public override void Exit() { }
 }

@@ -1,61 +1,44 @@
 ﻿using B83.Win32;
 using DG.Tweening;
 using SFB;
+using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
-using UnityEngine.UIElements;
-using Button = UnityEngine.UI.Button;
-using Unity.VisualScripting;
-using Image = UnityEngine.UI.Image;
-using UnityEngine.InputSystem.LowLevel;
 using UnityEngine.EventSystems;
-using System;
-using System.Threading.Tasks;
 
 public class UploaderState : AbstractMenuState
 {
-    // Parent Containers
+    // Contenedores UI
     private Transform SubirArchivosRoot;
     private Transform PanelArchivos;
-
-    //Other variables UI
-    [Header("UI")]
-    public RectTransform contentPanel; //Scroll contentn
-    public GameObject FileButtonPrefab; //FileButtonPrefab
-    public Button Save;                 // Boton de guardar
+    public RectTransform contentPanel;
+    public GameObject FileButtonPrefab;
+    public Button Save;
     public TextMeshProUGUI PathText;
-    public Button SetRuta;  //Ruta editable boton
-    public Button Atras;  //Go Back In Files
-    public Button Retroceder;  //Go Back In Files
-    public Button SubirArchivos;  //UploadFiles from Explorador de archivos
+    public Button Atras;
+    public Button Retroceder;
+    public Button SubirArchivos;
 
-    // Menu contextual
+    // Gestión de contexto y archivos
     public ContextMenuManager contextMenuScript;
     public static event Action<string> OnCurrentFolderChanged;
+    public GameObject CreandoContextoPanel;
 
-    private float doubleClickTime = 0.3f; // Tiempo máximo entre clics para considerarse doble clic
+    private Dictionary<string, Sprite> iconDictionary;
+    private string rootFolder = Path.Combine(Application.persistentDataPath, "UploadedFiles");
+    private string _currentFolder = "";
+    private float doubleClickTime = 0.3f;
     private Dictionary<string, float> lastClickTimeMap = new Dictionary<string, float>();
 
-    //CargandoContexto
-    public GameObject CreandoContextoPanel; //FileButtonPrefab
-
-    // Icon variable
-    [Header("Iconos")]
-    private Dictionary<string, Sprite> iconDictionary;
-
-    // Rutas
-    string rootFolder = Path.Combine(Application.persistentDataPath, "UploadedFiles");
-
     private APIManager api;
-
-    private string _currentFolder = "";
-
-    //Notificaciones
-    NotificationManager notifManager;
+    private NotificationManager notifManager;
+    private AbstractMenuState newState;
 
     public string CurrentFolder
     {
@@ -73,702 +56,315 @@ public class UploaderState : AbstractMenuState
     public UploaderState(IMenuState menu) : base(menu)
     {
         api = GameObject.FindObjectOfType<APIManager>();
+        notifManager = GameObject.FindObjectOfType<NotificationManager>();
     }
 
-    public async override void Enter()
+    public override void Enter()
     {
-        SubirArchivosRoot = GameObject.Find("SubirArchivos").transform; //Root
+        // 1. Inicialización de rutas y carpetas
+        if (!Directory.Exists(rootFolder)) Directory.CreateDirectory(rootFolder);
+        CurrentFolder = rootFolder;
 
-        PanelArchivos = SubirArchivosRoot.Find("PanelArchivos"); //Panel con elementos del explorador de archivos
-
+        // 2. Localización de UI y Referencias
+        SubirArchivosRoot = GameObject.Find("SubirArchivos").transform;
+        PanelArchivos = SubirArchivosRoot.Find("PanelArchivos");
         contextMenuScript = PanelArchivos.Find("ContextButtonsContainer").GetComponent<ContextMenuManager>();
-
         CreandoContextoPanel = SubirArchivosRoot.Find("CreandoContexto").Find("CreandoContextoPanel").gameObject;
-
-        TransicionEnter();
-        LoadIcons();
-
         FileButtonPrefab = PanelArchivos.Find("FilePrefab").gameObject;
-
         contentPanel = PanelArchivos.Find("Scroll View").Find("Viewport").Find("Content").GetComponent<RectTransform>();
 
-        //INTERACTUABLES
+        // 3. Configuración de Componentes e Interactuables
         Retroceder = SubirArchivosRoot.Find("Retroceder").GetComponent<Button>();
-        Retroceder.gameObject.SetActive(true);
-
         Save = SubirArchivosRoot.Find("Guardar").GetComponent<Button>();
-        Save.gameObject.SetActive(true);
-        Save.onClick.AddListener(saveChanges);
-
         PathText = PanelArchivos.Find("RutaInputField").GetComponent<TextMeshProUGUI>();
-
         Atras = PanelArchivos.Find("Atrás").GetComponent<Button>();
-        Atras.onClick.AddListener(GoBack);
-
         SubirArchivos = SubirArchivosRoot.Find("SubirArchivosButt").GetComponent<Button>();
-        SubirArchivos.onClick.AddListener(UploadFile);
-        SubirArchivos.gameObject.SetActive(true);
+        notifManager = GameObject.FindObjectOfType<NotificationManager>();
 
+        // 4. ACTIVACIÓN DE UI
+        PanelArchivos.gameObject.SetActive(true);
+        Retroceder.gameObject.SetActive(true);
+        Save.gameObject.SetActive(true);
+        SubirArchivos.gameObject.SetActive(true);
+        Atras.gameObject.SetActive(true);
+
+        // 5. LIMPIEZA Y ASIGNACIÓN DE LISTENERS (Evita duplicados si se re-entra al estado)
+        Save.onClick.RemoveAllListeners();
+        Atras.onClick.RemoveAllListeners();
+        SubirArchivos.onClick.RemoveAllListeners();
+        Retroceder.onClick.RemoveAllListeners();
+
+        Save.onClick.AddListener(SaveChanges);
+        Atras.onClick.AddListener(GoBack);
+        SubirArchivos.onClick.AddListener(UploadFileAction);
         Retroceder.onClick.AddListener(() =>
         {
-            menu.SetState(new ChoseCharacterState(menu));
+            newState = new ChoseCharacterState(menu);
             TransicionExit();
         });
 
-        notifManager = GameObject.FindObjectOfType<NotificationManager>();
-
-        api.GetRootFolder((rutaServidor) => {
-            if (!string.IsNullOrEmpty(rutaServidor))
-            {
-                rootFolder = rutaServidor;
-            }
-            else
-            {
-                if (!Directory.Exists(rootFolder))
-                    Directory.CreateDirectory(rootFolder);
-            }
-
-            CurrentFolder = rootFolder;
-            RefreshView();
+        // 6. Configuración de fondo para click derecho
+        EventTrigger backgroundTrigger = contentPanel.gameObject.GetComponent<EventTrigger>() ?? contentPanel.gameObject.AddComponent<EventTrigger>();
+        backgroundTrigger.triggers.Clear(); // Limpiar triggers viejos
+        EventTrigger.Entry bgEntry = new EventTrigger.Entry { eventID = EventTriggerType.PointerClick };
+        bgEntry.callback.AddListener((data) => {
+            PointerEventData pData = (PointerEventData)data;
+            if (pData.button == PointerEventData.InputButton.Right)
+                contextMenuScript.ShowMenu(CurrentFolder, pData.position, false);
         });
+        backgroundTrigger.triggers.Add(bgEntry);
 
-        CurrentFolder = rootFolder;
-
+        // 7. Carga de datos y visual
+        LoadIcons();
         OnEnable();
+        RefreshView();
+        TransicionEnter();
+    }
 
+
+    // ==========================================================
+    // LÓGICA DE GUARDADO Y SINCRONIZACIÓN CON EL SERVIDOR
+    // ==========================================================
+    public async void SaveChanges()
+    {
+        string[] allowedExts = { ".txt", ".pdf", ".doc", ".docx" };
+        notifManager.ShowNotification("Validating structure...", Color.yellow, 1f);
+        await Task.Delay(500);
+
+        // 1. Validar que no haya archivos sueltos en la raíz (deben estar en carpetas/épocas)
+        if (Directory.GetFiles(rootFolder).Length > 0)
+        {
+            notifManager.ShowNotification("Error: Files in root not allowed. Move them to a folder.", Color.red, 4f);
+            return;
+        }
+
+        var contextFolders = Directory.GetDirectories(rootFolder);
+        if (contextFolders.Length == 0)
+        {
+            notifManager.ShowNotification("Error: No context folders found.", Color.red, 3f);
+            return;
+        }
+
+        showCreandoContextoPanel();
+        notifManager.ShowNotification("Uploading contexts...", Color.cyan, 2f);
+
+        try
+        {
+            foreach (var folderPath in contextFolders)
+            {
+                string folderName = Path.GetFileName(folderPath);
+
+                // Filtrar archivos válidos de la carpeta
+                List<string> filesInFolder = Directory.GetFiles(folderPath)
+                    .Where(f => allowedExts.Contains(Path.GetExtension(f).ToLower()))
+                    .ToList();
+
+                if (filesInFolder.Count == 0) continue;
+
+                bool isDone = false;
+
+                // PASO 1: Subir archivos físicos
+                api.UploadContextFiles(folderName, filesInFolder, (res) => {
+
+                    // PASO 2: Construir el índice FAISS para este contexto
+                    api.BuildContextIndex(folderName, (indexRes) => {
+                        Debug.Log($"Contexto {folderName} sincronizado.");
+                        isDone = true;
+                    });
+                });
+
+                // Espera asíncrona para que el servidor procese un contexto antes del siguiente
+                float timeout = 0;
+                while (!isDone && timeout < 30f)
+                {
+                    await Task.Delay(100);
+                    timeout += 0.1f;
+                }
+            }
+
+            notifManager.ShowNotification("All contexts saved!", Color.green, 3f);
+            CancelarContextoPanel(false);
+        }
+        catch (Exception e)
+        {
+            Debug.LogError(e);
+            CancelarContextoPanel(true);
+        }
+    }
+
+    // ==========================================================
+    // GESTIÓN DEL EXPLORADOR DE ARCHIVOS LOCAL
+    // ==========================================================
+
+    void RefreshView()
+    {
+        PathText.text = CurrentFolder;
+        foreach (Transform t in contentPanel) GameObject.Destroy(t.gameObject);
+
+        string rootNormalized = Path.GetFullPath(rootFolder).Replace('\\', '/');
+        string currentNormalized = Path.GetFullPath(CurrentFolder).Replace('\\', '/');
+
+        foreach (var folder in Directory.GetDirectories(CurrentFolder))
+        {
+            string folderName = Path.GetFileName(folder);
+            GameObject btn = GameObject.Instantiate(FileButtonPrefab, contentPanel);
+            btn.SetActive(true);
+            btn.GetComponentInChildren<TMP_Text>().text = folderName;
+            btn.transform.Find("Icon").GetComponent<Image>().sprite = GetIconForExtension("folder");
+
+            if (currentNormalized != rootNormalized) PintarBotonError(btn);
+
+            btn.GetComponent<Button>().onClick.AddListener(() => HandleDoubleClick(folder, true));
+
+            AddRightClickMenu(btn, folder, true);
+        }
+
+        string[] allowedExts = { ".txt", ".pdf", ".doc", ".docx" };
+        foreach (var file in Directory.GetFiles(CurrentFolder))
+        {
+            string fileName = Path.GetFileName(file);
+            string ext = Path.GetExtension(file).ToLower();
+            GameObject btn = GameObject.Instantiate(FileButtonPrefab, contentPanel);
+            btn.SetActive(true);
+            btn.GetComponentInChildren<TMP_Text>().text = fileName;
+            btn.transform.Find("Icon").GetComponent<Image>().sprite = GetIconForExtension(ext);
+
+            bool isIllegalLocation = (currentNormalized == rootNormalized);
+            bool isInvalidExt = !allowedExts.Contains(ext);
+            if (isIllegalLocation || isInvalidExt) PintarBotonError(btn);
+
+            btn.GetComponent<Button>().onClick.AddListener(() => HandleDoubleClick(file, false));
+
+            AddRightClickMenu(btn, file, false);
+        }
+    }
+
+    private void HandleDoubleClick(string path, bool isFolder)
+    {
+        float lastClickTime = lastClickTimeMap.ContainsKey(path) ? lastClickTimeMap[path] : -1f;
+        if (Time.time - lastClickTime <= doubleClickTime)
+        {
+            if (isFolder) EnterFolder(path);
+            else OpenFile(path);
+            lastClickTimeMap[path] = -1f;
+        }
+        else lastClickTimeMap[path] = Time.time;
+    }
+
+    private void AddRightClickMenu(GameObject btn, string path, bool isFolder)
+    {
+        EventTrigger trigger = btn.GetComponent<EventTrigger>() ?? btn.AddComponent<EventTrigger>();
+
+        // Limpiamos triggers previos para evitar duplicados al refrescar
+        trigger.triggers.Clear();
+
+        EventTrigger.Entry entry = new EventTrigger.Entry { eventID = EventTriggerType.PointerClick };
+        entry.callback.AddListener((data) => {
+            PointerEventData pData = (PointerEventData)data;
+            if (pData.button == PointerEventData.InputButton.Right)
+            {
+            
+                contextMenuScript.ShowMenu(path, pData.position, true);
+
+                EventSystem.current.SetSelectedGameObject(btn);
+            }
+        });
+        trigger.triggers.Add(entry);
+    }
+
+    // ==========================================================
+    // UTILIDADES Y MENÚS
+    // ==========================================================
+
+    public void UploadFileAction()
+    {
+        var files = StandaloneFileBrowser.OpenFilePanel("Select Files", "", "", true);
+        foreach (string source in files)
+        {
+            if (string.IsNullOrEmpty(source)) continue;
+            string dest = Path.Combine(CurrentFolder, Path.GetFileName(source));
+            File.Copy(source, dest, true);
+        }
         RefreshView();
     }
 
-    public override void Exit() //Reset por si vuelve atrás
+    void EnterFolder(string folder) { CurrentFolder = folder; RefreshView(); }
+
+    public void GoBack()
     {
-
-        Save.onClick.RemoveAllListeners();
-
-        Atras.onClick.RemoveAllListeners();
-
-        SubirArchivos.onClick.RemoveAllListeners();
-
-        Save.gameObject.SetActive(false);
-        Retroceder.gameObject.SetActive(false);
-        SubirArchivos.gameObject.SetActive(false);
+        if (Path.GetFullPath(CurrentFolder) == Path.GetFullPath(rootFolder)) return;
+        CurrentFolder = Directory.GetParent(CurrentFolder).FullName;
+        RefreshView();
     }
 
-    public override void FixedUpdate()
+    private void PintarBotonError(GameObject btn)
     {
+        Color err = new Color(1f, 0.3f, 0.3f);
+        btn.GetComponent<Image>().color = err;
+        ColorBlock cb = btn.GetComponent<Button>().colors;
+        cb.normalColor = err;
+        cb.selectedColor = err;
+        btn.GetComponent<Button>().colors = cb;
     }
 
-    public override async void TransicionEnter()
+    Sprite GetIconForExtension(string ext) => iconDictionary.TryGetValue(ext, out Sprite s) ? s : iconDictionary["default"];
+
+    public void LoadIcons()
     {
-        PanelArchivos.gameObject.SetActive(true);
+        iconDictionary = new Dictionary<string, Sprite> {
+            { "folder", Resources.Load<Sprite>("Icons/FolderNormal") },
+            { ".pdf", Resources.Load<Sprite>("Icons/PDF") },
+            { ".txt", Resources.Load<Sprite>("Icons/TXT") },
+            { "default", Resources.Load<Sprite>("Icons/Default") }
+        };
     }
+
+    private void showCreandoContextoPanel() { CreandoContextoPanel.SetActive(true); }
+    private void CancelarContextoPanel(bool error)
+    {
+        CreandoContextoPanel.SetActive(false);
+        RefreshView();
+    }
+
+    void OpenFile(string path) => System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
+
+    public override void Exit() { OnDisable(); }
+    public override void FixedUpdate() { }
+    public override void Update() { }
+    public override void TransicionEnter() { PanelArchivos.gameObject.SetActive(true); }
     public override async void TransicionExit()
     {
-        PanelArchivos.gameObject.SetActive(false);
+        if (PanelArchivos != null) PanelArchivos.gameObject.SetActive(false);
+        if (Retroceder != null) Retroceder.gameObject.SetActive(false);
+        if (Save != null) Save.gameObject.SetActive(false);
+        if (SubirArchivos != null) SubirArchivos.gameObject.SetActive(false);
+        if (Atras != null) Atras.gameObject.SetActive(false);
+        if (CreandoContextoPanel != null) CreandoContextoPanel.SetActive(false);
+
+        if (Save != null) Save.onClick.RemoveAllListeners();
+        if (Atras != null) Atras.onClick.RemoveAllListeners();
+        if (SubirArchivos != null) SubirArchivos.onClick.RemoveAllListeners();
+        if (Retroceder != null) Retroceder.onClick.RemoveAllListeners();
+
         OnDisable();
-    }
-    public override void Update()
-    {
+        menu.SetState(newState);
     }
 
     void OnEnable()
     {
         UnityDragAndDropHook.InstallHook();
         UnityDragAndDropHook.OnDroppedFiles += OnFiles;
-        ContextMenuManager.OnRenameRequested += StartRenameForButton;
-
         ContextMenuManager.OnRefreshRequested += RefreshView;
-
     }
-
     void OnDisable()
     {
         UnityDragAndDropHook.UninstallHook();
         UnityDragAndDropHook.OnDroppedFiles -= OnFiles;
-        ContextMenuManager.OnRenameRequested -= StartRenameForButton;
-
         ContextMenuManager.OnRefreshRequested -= RefreshView;
     }
-
-    public async void saveChanges()
-    {
-        string[] allowedExts = new[] { ".txt", ".pdf", ".doc", ".docx" };
-        notifManager.ShowNotification("Checking files...", Color.yellow, 0.5f);
-        await Task.Delay(1000);
-        // Obtener todas las carpetas y archivos en rootFolder
-        var allDirectories = Directory.GetDirectories(rootFolder, "*", SearchOption.AllDirectories);
-        var allFiles = Directory.GetFiles(rootFolder, "*", SearchOption.AllDirectories);
-
-        var nestedFolders = allDirectories.Where(dir =>
-        {
-            string relativeDir = Path.GetRelativePath(rootFolder, dir);
-            var parts = relativeDir.Split(Path.DirectorySeparatorChar);
-            return parts.Length >= 2; 
-        }).ToList();
-
-        if (nestedFolders.Count > 0)
-        {
-            foreach (var folder in nestedFolders)
-            {
-                string shortPath = GetShortenedPath(folder, rootFolder);
-                notifManager.ShowNotification("Error: Subfolders is not permitted" + shortPath, Color.red, 5f);
-            }
-            return; 
-        }
-
-        var filesInRoot = allFiles.Where(file =>
-        {
-            string relativeFile = Path.GetRelativePath(rootFolder, file);
-            var parts = relativeFile.Split(Path.DirectorySeparatorChar);
-            return parts.Length == 1; // Solo el archivo, sin carpetas
-        }).ToList();
-
-        if (filesInRoot.Count > 0)
-        {
-            foreach (var file in filesInRoot)
-            {
-                string shortPath = GetShortenedPath(file, rootFolder);
-                notifManager.ShowNotification("Error: Archivos en la raíz no permitidos " + shortPath, Color.red, 5f);
-
-                GameObject btn = FindButtonByPath(file);
-                if (btn != null)
-                {
-                    var btnImage = btn.GetComponent<UnityEngine.UI.Image>();
-                    if (btnImage != null)
-                    {
-                        btnImage.color = Color.red;
-                    }
-
-                    var btnComp = btn.GetComponent<Button>();
-                    if (btnComp != null)
-                    {
-                        ColorBlock colors = btnComp.colors;
-                        colors.normalColor = Color.red;
-                        colors.selectedColor = new Color(0.8f, 0f, 0f);
-                        btnComp.colors = colors;
-                    }
-                }
-            }
-
-            return;
-        }
-       
-        // Validar extensiones permitidas
-        var invalidFiles = allFiles.Where(file => !allowedExts.Contains(Path.GetExtension(file).ToLower())).ToList();
-
-
-        if (invalidFiles.Count > 0)
-        {
-            foreach (var filePath in invalidFiles)
-            {
-                GameObject btn = FindButtonByPath(filePath);
-
-                string shortenedPath = GetShortenedPath(filePath, rootFolder);
-                notifManager.ShowNotification("Files not valid: " + shortenedPath, Color.red, 5f);
-
-                if (btn != null)
-                {
-                    var btnComp = btn.GetComponent<Button>();
-                    if (btnComp != null)
-                    {
-                        ColorBlock colors = btnComp.colors;
-                        colors.normalColor = Color.red;
-                        btnComp.colors = colors;
-                    }
-                }
-            }
-
-            return; // Cancelar el guardado si hay archivos inválidos
-        }
-        notifManager.ShowNotification("Saving context files...", Color.yellow, 5f);
-
-        try
-        {
-            showCreandoContextoPanel();
-
-            api.ResetDatabase(); //Borrar BD
-
-            await Task.Delay(5000);
-
-            api.UpdateRootFolder(rootFolder, (json) => {
-                Debug.Log("Servidor finalizó el entrenamiento.");
-                CancelarContextoPanel(false);
-            });
-        }
-        catch(Exception e)
-        {
-            Debug.LogError($"Error en el proceso de guardado: {e.Message}");
-            CancelarContextoPanel(true);
-        }
-
-    }
-
-    private void showCreandoContextoPanel()
-    {
-        CreandoContextoPanel.SetActive(true);
-
-        foreach (Transform child in CreandoContextoPanel.transform)
-        {
-            child.gameObject.SetActive(true);
-        }
-    }
-
-    private void CancelarContextoPanel(bool error)
-    {
-        if (error)
-        {
-            notifManager.ShowNotification("Action canceled. Data NOT persisted", Color.red, 5f);
-        }
-        else
-        {
-            notifManager.ShowNotification("Saving completed!", Color.green, 5f);
-        }
-
-        foreach (Transform child in CreandoContextoPanel.transform)
-            {
-                child.gameObject.SetActive(false);
-            }
-
-        CreandoContextoPanel.SetActive(false);
-    }
-
-    string GetShortenedPath(string fullPath, string root)
-    {
-        try
-        {
-            string relativePath = Path.GetRelativePath(root, fullPath);
-            string[] parts = relativePath.Split(Path.DirectorySeparatorChar);
-
-            if (parts.Length <= 2)
-            {
-                return relativePath.Replace('\\', '/'); // carpeta1/archivo
-            }
-            else
-            {
-                return ".../" + string.Join("/", parts.Skip(parts.Length - 2)); // .../carpeta2/archivo
-            }
-        }
-        catch
-        {
-            return Path.GetFileName(fullPath); // fallback
-        }
-    }
-
-    private GameObject FindButtonByPath(string path)
-    {
-        string normPath1 = Path.GetFullPath(path).ToLowerInvariant();
-
-        foreach (Transform child in contentPanel)
-        {
-            string childPath = Path.Combine(CurrentFolder, child.GetComponentInChildren<TMP_Text>().text);
-            string normPath2 = Path.GetFullPath(childPath).ToLowerInvariant();
-            if (normPath1 == normPath2)
-                return child.gameObject;
-        }
-        return null;
-    }
-
-    void StartRenameForButton(GameObject button)
-    {
-        TMP_Text label = button.GetComponentInChildren<TMP_Text>(true); // busca también inactivos
-        TMP_InputField input = button.GetComponentInChildren<TMP_InputField>(true);
-
-        if (label == null || input == null)
-        {
-            Debug.LogWarning("No se encontró TMP_Text o TMP_InputField en el botón.");
-            return;
-        }
-
-        string oldName = label.text;
-
-        // Mostrar el input, ocultar el label
-        input.gameObject.SetActive(true);
-        label.gameObject.SetActive(false);
-
-        input.text = oldName;
-        input.ActivateInputField();
-        input.Select();
-
-        input.onEndEdit.RemoveAllListeners();
-        input.onEndEdit.AddListener((newName) =>
-        {
-            if (!string.IsNullOrWhiteSpace(newName) && newName != oldName)
-            {
-                string oldPath = Path.Combine(CurrentFolder, oldName);
-                string newPath = Path.Combine(CurrentFolder, newName);
-
-                try
-                {
-                    if (Directory.Exists(oldPath))
-                    {
-                        Directory.Move(oldPath, newPath);
-                    }
-                    else if (File.Exists(oldPath))
-                    {
-                        File.Move(oldPath, newPath);
-                    }
-
-                    RefreshView();
-                }
-                catch (Exception ex)
-                {
-                    Debug.LogError("Error al renombrar: " + ex.Message);
-                }
-            }
-
-            // Ocultar input, mostrar label
-            input.gameObject.SetActive(false);
-            label.gameObject.SetActive(true);
-        });
-    }
-
-    public void LoadIcons()
-    {
-        iconDictionary = new Dictionary<string, Sprite>
-    {
-        { "folder", Resources.Load<Sprite>("Icons/FolderNormal") },
-        { ".pdf", Resources.Load<Sprite>("Icons/PDF") },
-        { ".doc", Resources.Load<Sprite>("Icons/DOC") },
-        { ".docx", Resources.Load<Sprite>("Icons/DOC") },
-        { ".txt", Resources.Load<Sprite>("Icons/TXT") },
-        { ".png", Resources.Load<Sprite>("Icons/Default") },
-        { ".jpg", Resources.Load<Sprite>("Icons/Default") },
-        { ".jpeg", Resources.Load<Sprite>("Icons/Default") },
-        { "default", Resources.Load<Sprite>("Icons/Default") }
-    };
-    }
-
-
-    public void SelectRootFolder()
-    {
-#if UNITY_STANDALONE || UNITY_EDITOR
-        var folders = StandaloneFileBrowser.OpenFolderPanel("Selecciona carpeta raíz", "", false);
-        if (folders.Length > 0 && !string.IsNullOrEmpty(folders[0]))
-        {
-            rootFolder = folders[0];
-            CurrentFolder = rootFolder;
-            RefreshView();
-        }
-#endif
-    }
-
     void OnFiles(List<string> files, POINT pos)
     {
-        foreach (var file in files)
-        {
-            if (File.Exists(file))
-            {
-                string destPath = Path.Combine(CurrentFolder, Path.GetFileName(file));
-                try
-                {
-                    File.Copy(file, destPath, true);
-                    Debug.Log($"Archivo arrastrado copiado: {file} → {destPath}");
-                }
-                catch (IOException ex)
-                {
-                    Debug.LogError($"Error al copiar: {ex.Message}");
-                }
-            }
-        }
-
+        foreach (var f in files) File.Copy(f, Path.Combine(CurrentFolder, Path.GetFileName(f)), true);
         RefreshView();
-    }
-
-
-    void EnterFolder(string folder)
-    {
-        CurrentFolder = folder;
-        RefreshView();
-    }
-
-    public void GoBack()
-    {
-        string currentNormalized = Path.GetFullPath(CurrentFolder).Replace('\\', '/').TrimEnd('/');
-        string rootNormalized = Path.GetFullPath(rootFolder).Replace('\\', '/').TrimEnd('/');
-
-        if (string.Equals(currentNormalized, rootNormalized, StringComparison.OrdinalIgnoreCase))
-            return;
-
-        CurrentFolder = Directory.GetParent(CurrentFolder).FullName;
-        RefreshView();
-    }
-
-    /// <summary>
-    /// Permite subir carpetas o archivos individuales
-    /// </summary>
-    public void UploadFile()
-    {
-#if UNITY_STANDALONE || UNITY_EDITOR
-        // Subir archivos
-        var files = StandaloneFileBrowser.OpenFilePanel("Selecciona archivos", "", "", true);
-        foreach (string source in files)
-        {
-            if (!string.IsNullOrEmpty(source))
-            {
-                string dest = Path.Combine(CurrentFolder, Path.GetFileName(source));
-                try
-                {
-                    File.Copy(source, dest, true);
-                    Debug.Log($"Archivo subido: {source} → {dest}");
-                }
-                catch (IOException ex)
-                {
-                    Debug.LogError($"Error al copiar archivo {source}: {ex.Message}");
-                }
-            }
-        }
-
-        RefreshView();
-#endif
-    }
-
-    /// <summary>
-    /// Copia el contenido de la carpeta
-    /// </summary>
-    /// <param name="sourceDir"></param>
-    /// <param name="targetDir"></param>
-    void CopyFolderRecursive(string sourceDir, string targetDir)
-    {
-        if (!Directory.Exists(targetDir))
-        {
-            Directory.CreateDirectory(targetDir);
-        }
-
-        // Copiar archivos
-        foreach (var file in Directory.GetFiles(sourceDir))
-        {
-            string destFile = Path.Combine(targetDir, Path.GetFileName(file));
-            File.Copy(file, destFile, true);
-        }
-
-        // Copiar subcarpetas
-        foreach (var dir in Directory.GetDirectories(sourceDir))
-        {
-            string destSubDir = Path.Combine(targetDir, Path.GetFileName(dir));
-            CopyFolderRecursive(dir, destSubDir);
-        }
-    }
-
-    /// <summary>
-    /// Refresca la vista cada vez que haya una actualización
-    /// </summary>
-    void RefreshView()
-    {
-        PathText.text = CurrentFolder;
-
-        foreach (Transform t in contentPanel)
-            GameObject.Destroy(t.gameObject);
-
-        // Carpetas hijas
-        var folders = Directory.GetDirectories(CurrentFolder);
-        foreach (var folder in folders)
-        {
-            string folderName = Path.GetFileName(folder);
-            GameObject btn = GameObject.Instantiate(FileButtonPrefab, contentPanel);
-
-            var textComp = btn.GetComponentInChildren<TMP_Text>();
-            textComp.text = folderName;
-
-            btn.SetActive(true);
-
-            var iconObj = btn.transform.Find("Icon");
-            if (iconObj != null)
-            {
-                // Obtiene el componente Image del hijo "Icon"
-                var imgComp = iconObj.GetComponent<UnityEngine.UI.Image>();
-                if (imgComp != null)
-                {
-                    // Asigna el sprite que quieres mostrar en el icono
-                    imgComp.sprite = GetIconForExtension("folder"); ; // aquí pones la imagen que quieras
-                }
-            }
-
-            string relativeDir = Path.GetRelativePath(rootFolder, folder);
-            var folderParts = relativeDir.Split(Path.DirectorySeparatorChar);
-
-            if (folderParts.Length >= 2)
-            {
-                PintarBotonError(btn);
-            }
-
-            string fCopy = folder;
-            btn.GetComponent<Button>().onClick.AddListener(() =>
-            {
-                float lastClickTime;
-                if (!lastClickTimeMap.TryGetValue(fCopy, out lastClickTime))
-                    lastClickTime = -1f;
-
-                float timeSinceLastClick = Time.time - lastClickTime;
-
-                if (timeSinceLastClick <= doubleClickTime)
-                {
-                    EnterFolder(fCopy); // Doble clic detectado
-                    lastClickTimeMap[fCopy] = -1f; // Reset
-                }
-                else
-                {
-                    lastClickTimeMap[fCopy] = Time.time;
-                }
-            });
-
-            EventTrigger trigger = btn.AddComponent<EventTrigger>();
-
-            EventTrigger.Entry rightClick = new EventTrigger.Entry
-            {
-                eventID = EventTriggerType.PointerClick
-            };
-
-            rightClick.callback.AddListener((eventData) =>
-            {
-                PointerEventData pointerData = (PointerEventData)eventData;
-                if (pointerData.button == PointerEventData.InputButton.Right)
-                {
-                    Vector2 screenPos = pointerData.position;
-                    // Pasamos 'true' porque es un elemento (carpeta)
-                    contextMenuScript.ShowMenu(fCopy, screenPos, true);
-                    EventSystem.current.SetSelectedGameObject(btn.gameObject);
-                }
-            });
-
-            trigger.triggers.Add(rightClick);
-
-        }
-
-        // Archivos
-        var allowedExts = new[] { ".txt", ".pdf", ".doc", ".docx" };
-        var files = Directory.GetFiles(CurrentFolder); // TODOS los archivos
-
-
-        foreach (var file in files)
-        {
-            string fileName = Path.GetFileName(file);
-            GameObject btn = GameObject.Instantiate(FileButtonPrefab, contentPanel);
-
-            var textComp = btn.GetComponentInChildren<TMP_Text>();
-            textComp.text = fileName;
-
-            btn.SetActive(true);
-            string ext = Path.GetExtension(file).ToLower();
-            string relativeFile = Path.GetRelativePath(rootFolder, file);
-            var fileParts = relativeFile.Split(Path.DirectorySeparatorChar);
-
-            bool ubicacionIlegal = fileParts.Length == 1 || fileParts.Length >= 3;
-            bool extensionInvalida = !allowedExts.Contains(ext);
-
-            if (ubicacionIlegal || extensionInvalida)
-            {
-                PintarBotonError(btn);
-            }
-
-            var iconObj = btn.transform.Find("Icon");
-            if (iconObj != null)
-            {
-                // Obtiene el componente Image del hijo "Icon"
-                var imgComp = iconObj.GetComponent<Image>();
-                if (imgComp != null)
-                {
-                    // Asigna el sprite que quieres mostrar en el icono
-                    imgComp.sprite = GetIconForExtension(Path.GetExtension(file).ToLower());
-
-                    imgComp.sprite = GetIconForExtension(ext);
-
-                    // Si la extensión NO está en la lista permitida, pintar el botón naranja
-                    if (!allowedExts.Contains(ext))
-                    {
-                        var btnComp = btn.GetComponent<Button>();
-                        if (btnComp != null)
-                        {
-                            ColorBlock colors = btnComp.colors;
-                            colors.normalColor = new Color(1f, 0.5f, 0f); // naranja
-                            btnComp.colors = colors;
-                        }
-                    }
-                }
-            }
-
-            string fCopy = file;
-            btn.GetComponent<Button>().onClick.AddListener(() =>
-            {
-                float lastClickTime;
-                if (!lastClickTimeMap.TryGetValue(fCopy, out lastClickTime))
-                    lastClickTime = -1f;
-
-                float timeSinceLastClick = Time.time - lastClickTime;
-
-                if (timeSinceLastClick <= doubleClickTime)
-                {
-                    OpenFile(fCopy); // Doble clic detectado
-                    lastClickTimeMap[fCopy] = -1f; // Reset
-                }
-                else
-                {
-                    lastClickTimeMap[fCopy] = Time.time;
-                }
-            });
-
-            EventTrigger trigger = btn.AddComponent<EventTrigger>();
-
-            EventTrigger.Entry rightClick = new EventTrigger.Entry
-            {
-                eventID = EventTriggerType.PointerClick
-            };
-
-            rightClick.callback.AddListener((eventData) =>
-            {
-                PointerEventData pointerData = (PointerEventData)eventData;
-                if (pointerData.button == PointerEventData.InputButton.Right)
-                {
-                    Vector2 screenPos = pointerData.position;
-                    // Pasamos 'true' porque es un elemento (archivo)
-                    contextMenuScript.ShowMenu(fCopy, screenPos, true);
-                    EventSystem.current.SetSelectedGameObject(btn.gameObject);
-                }
-            });
-
-            trigger.triggers.Add(rightClick);
-        }
-    }
-
-    private void PintarBotonError(GameObject btn)
-    {
-        Color colorError = new Color(1f, 0.2f, 0.2f, 1f); // Rojo intenso
-
-        // 1. Cambiar el color de la imagen de fondo
-        var btnImage = btn.GetComponent<UnityEngine.UI.Image>();
-        if (btnImage != null)
-        {
-            btnImage.color = colorError;
-        }
-
-        // 2. Cambiar los colores de transición del botón para que no vuelva a azul al quitar el mouse
-        var btnComp = btn.GetComponent<Button>();
-        if (btnComp != null)
-        {
-            ColorBlock colors = btnComp.colors;
-            colors.normalColor = colorError;
-            colors.highlightedColor = new Color(1f, 0.4f, 0.4f, 1f); // Rojo claro al pasar mouse
-            colors.pressedColor = new Color(0.7f, 0f, 0f, 1f);       // Rojo oscuro al clicar
-            colors.selectedColor = colorError;
-            btnComp.colors = colors;
-        }
-    }
-
-    Sprite GetIconForExtension(string ext)
-    {
-        return iconDictionary.TryGetValue(ext, out Sprite icon)
-            ? icon
-            : iconDictionary["default"];
-    }
-
-    void OpenFile(string path)
-    {
-#if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
-        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
-#elif UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX
-        System.Diagnostics.Process.Start("open", path);
-#elif UNITY_STANDALONE_LINUX
-        System.Diagnostics.Process.Start("xdg-open", path);
-#else
-        Debug.LogWarning("Abrir archivos no soportado en esta plataforma");
-#endif
     }
 }

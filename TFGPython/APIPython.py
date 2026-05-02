@@ -13,8 +13,8 @@ from FaissTry18_04 import interactuar
 from faiss_index_builder import construir_todos_los_indices_Unity, eliminar_todos_los_indices
 
 sys.stdout.reconfigure(line_buffering=True)
-UPLOAD_DIR = "uploads/context_files"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+UPLOAD_BASE_DIR = "uploads"
+os.makedirs(UPLOAD_BASE_DIR, exist_ok=True)
 
 app = FastAPI(title="AIGERIM AI API - V2")
 database.init_db()
@@ -22,10 +22,10 @@ database.init_db()
 
 # ========== MODELOS ==========
 class CharacterCreate(BaseModel):
-    Name: str
-    Age: str
-    Description: str
-    Epoca: str
+    name: str
+    age: str
+    description: str
+    epoca: str
 
 
 class MessageRequest(BaseModel):
@@ -35,19 +35,27 @@ class MessageRequest(BaseModel):
 # ========== ENDPOINTS DE ARCHIVOS Y CONTEXTO ==========
 
 # --- ENDPOINT 1: SUBIR Y PERSISTIR ---
+@app.get("/contexts")
+def get_all_contextos():
+    """
+    Devuelve la lista de todos los contextos (carpetas) disponibles en el servidor.
+    """
+    try:
+        if not os.path.exists(UPLOAD_BASE_DIR):
+            return []
+        folders = [f for f in os.listdir(UPLOAD_BASE_DIR) if os.path.isdir(os.path.join(UPLOAD_BASE_DIR, f))]
+        return {"contextos": folders}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/context/{folder_name}/upload")
 async def upload_files_to_folder(folder_name: str, files: List[UploadFile] = File(...)):
-    """
-    Recibe archivos y los guarda en una subcarpeta dentro de 'uploads/'.
-    Solo acepta archivos de texto (mimetype text/plain).
-    """
-    target_path = os.path.join("uploads", folder_name)
+    target_path = os.path.join(UPLOAD_BASE_DIR, folder_name)
     os.makedirs(target_path, exist_ok=True)
 
     saved_files = []
     for file in files:
-        # Validación de tipo de contenido
-        if file.content_type != "text/plain":
+        if "text" not in file.content_type and not file.filename.endswith('.txt'):
             continue
 
         file_location = os.path.join(target_path, file.filename)
@@ -57,25 +65,20 @@ async def upload_files_to_folder(folder_name: str, files: List[UploadFile] = Fil
 
     return {"status": "files_persisted", "folder": folder_name, "total": len(saved_files)}
 
-
-# --- ENDPOINT 2: CONSTRUIR ÍNDICE (SAVE) ---
 @app.post("/context/{folder_name}/save")
 def build_index_from_persisted_folder(folder_name: str, db: Session = Depends(database.get_db)):
     """
-    Toma los archivos ya persistidos en la carpeta especificada y construye FAISS.
+    Construye el índice para una carpeta específica sin borrar los demás.
     """
     try:
-        # 1. Registrar en la DB que esta es la carpeta activa
         folder = crud.update_or_create_root_folder(db, folder_name)
 
-        # 2. Construir índices usando la ruta interna generada
-        eliminar_todos_los_indices()
         construir_todos_los_indices_Unity(folder.route)
 
         return {
             "status": "success",
-            "message": f"Index created from folder: {folder_name}",
-            "files_processed_from": folder.route
+            "message": f"Index added/updated for: {folder_name}",
+            "route": folder.route
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error building index: {str(e)}")
@@ -96,10 +99,10 @@ def post_character(char_data: CharacterCreate, db: Session = Depends(database.ge
     try:
         new_char = crud.add_character(
             db,
-            name=char_data.Name,
-            age=char_data.Age,
-            description=char_data.Description,
-            epoca=char_data.Epoca
+            name=char_data.name,
+            age=char_data.age,
+            description=char_data.description,
+            epoca=char_data.epoca
         )
         return new_char
     except Exception as e:
@@ -147,17 +150,25 @@ def get_character_conversations(char_id: int, db: Session = Depends(database.get
 
 @app.post("/system/reset")
 def reset_database(db: Session = Depends(database.get_db)):
-    """Borra todo (DB y FAISS)."""
     try:
         crud.reset_all_tables(db)
         eliminar_todos_los_indices()
-        # Opcional: borrar archivos de UPLOAD_DIR
-        for f in os.listdir(UPLOAD_DIR):
-            os.remove(os.path.join(UPLOAD_DIR, f))
+
+        if os.path.exists(UPLOAD_BASE_DIR):
+            shutil.rmtree(UPLOAD_BASE_DIR)
+        os.makedirs(UPLOAD_BASE_DIR, exist_ok=True)
 
         return {"status": "success", "message": "System reset complete"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/status")
+def get_status():
+    """
+    Endpoint de control para que Unity sepa que el servidor está listo.
+    """
+    print("LOG: Unity ha consultado el estado - Servidor Activo")
+    return {"status": "ok"}
 
 
 if __name__ == "__main__":

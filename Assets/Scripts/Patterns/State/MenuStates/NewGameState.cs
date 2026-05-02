@@ -1,9 +1,7 @@
 using DG.Tweening;
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
-using System.Threading.Tasks;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -24,17 +22,20 @@ public class NewGameState : AbstractMenuState
     private AbstractMenuState state;
 
     private APIManager api;
+    private NotificationManager notifManager;
 
     public NewGameState(IMenuState menu) : base(menu)
     {
         api = GameObject.FindObjectOfType<APIManager>();
+        notifManager = GameObject.FindObjectOfType<NotificationManager>();
     }
 
-    public async override void Enter()
+    public override void Enter()
     {
         NewThings = GameObject.Find("NewThings").transform;
         ActiveGO = new List<GameObject>();
 
+        // Localizar componentes
         DescriptionField = NewThings.Find("DescriptionField").GetComponent<TMP_InputField>();
         ActiveGO.Add(DescriptionField.gameObject);
         NameField = NewThings.Find("NameField").GetComponent<TMP_InputField>();
@@ -50,9 +51,21 @@ public class NewGameState : AbstractMenuState
         BackButt = NewThings.Find("BackButtNewGame").GetComponent<Button>();
         ActiveGO.Add(BackButt.gameObject);
 
-        api.GetRootFolder((rutaServidor) => {
-            FillWithEpochs(rutaServidor);
-            ContinueButton.interactable = true;
+        // Desactivar botón hasta que carguen los contextos
+        ContinueButton.interactable = false;
+
+        // NUEVA LÓGICA: Consultar contextos disponibles al servidor
+        api.GetContextos((listaContextos) => {
+            if (listaContextos != null && listaContextos.Count > 0)
+            {
+                FillWithEpochs(listaContextos);
+                ContinueButton.interactable = true;
+            }
+            else
+            {
+                Debug.LogWarning("No se encontraron contextos en el servidor.");
+                notifManager.ShowNotification("Create a Context first!", Color.yellow, 3f);
+            }
         });
 
         foreach (GameObject go in ActiveGO) go.SetActive(true);
@@ -62,7 +75,6 @@ public class NewGameState : AbstractMenuState
 
         ContinueButton.onClick.AddListener(() =>
         {
-            // Primero guardamos y, cuando el servidor responda, cambiamos de estado
             AddCharacterToDataBase();
         });
 
@@ -73,30 +85,12 @@ public class NewGameState : AbstractMenuState
         });
     }
 
-    private void FillWithEpochs(string rootPath)
+    // Adaptado para recibir la lista directamente desde la API
+    private void FillWithEpochs(List<string> contextos)
     {
-        if (string.IsNullOrEmpty(rootPath) || !Directory.Exists(rootPath))
-        {
-            Debug.LogError("La ruta del servidor no es accesible localmente: " + rootPath);
-            return;
-        }
-
-        try
-        {
-            var directories = Directory.GetDirectories(rootPath);
-            List<string> folderNames = directories
-                .Select(dir => Path.GetFileName(dir))
-                .ToList();
-
-            EpocaField.ClearOptions();
-            EpocaField.AddOptions(folderNames);
-
-            Debug.Log($"Épocas cargadas desde: {rootPath}");
-        }
-        catch (Exception e)
-        {
-            Debug.LogError("Error al leer carpetas de época: " + e.Message);
-        }
+        EpocaField.ClearOptions();
+        EpocaField.AddOptions(contextos);
+        Debug.Log($"Contextos cargados desde el servidor: {contextos.Count}");
     }
 
     private void AddCharacterToDataBase()
@@ -104,24 +98,25 @@ public class NewGameState : AbstractMenuState
         string name = NameField.text;
         string age = AgeField.text;
         string desc = DescriptionField.text;
+
+        if (EpocaField.options.Count == 0) return;
         string epoca = EpocaField.options[EpocaField.value].text;
 
-        // Validación simple
         if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(age) || string.IsNullOrEmpty(desc))
         {
-            Debug.LogError("Faltan campos por rellenar");
+            notifManager.ShowNotification("Please fill all fields", Color.yellow, 2f);
             return;
         }
 
-        api.CreateCharacter(name, age, desc, epoca, (newId) =>
+        api.CreateCharacter(name, age, desc, epoca, (newChar) =>
         {
-            NewCharacter.characterName = name;
-            NewCharacter.characterAge = age;
-            NewCharacter.characterDescription = desc;
-            NewCharacter.characterEpoca = epoca;
-            NewCharacter.characterId = newId;
+            NewCharacter.characterName = newChar.name;
+            NewCharacter.characterAge = newChar.age;
+            NewCharacter.characterDescription = newChar.description;
+            NewCharacter.characterEpoca = newChar.epoca;
+            NewCharacter.characterId = newChar.id;
 
-            Debug.Log($"Personaje creado en Backend con ID: {newId}");
+            Debug.Log($"Personaje creado con éxito. ID: {newChar.id}");
 
             state = new ChattingMenuState(menu);
             TransicionExit();
@@ -136,7 +131,6 @@ public class NewGameState : AbstractMenuState
         NameField.text = "";
         AgeField.text = "";
         DescriptionField.text = "";
-        EpocaField.options[EpocaField.value].text = "";
 
         foreach (GameObject go in ActiveGO) go.SetActive(false);
         ActiveGO.Clear();

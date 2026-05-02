@@ -2,13 +2,11 @@ using DG.Tweening;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
-using UnityEngine.UIElements;
-using Button = UnityEngine.UI.Button;
+using System;
 
 public class ChoseCharacterState : AbstractMenuState
 {
     private Transform CreateContinue;
-
     private Button newButt;
     private Button continueButt;
     private Button contextButt;
@@ -17,26 +15,32 @@ public class ChoseCharacterState : AbstractMenuState
     private APIManager api;
     NotificationManager notifManager;
 
-
     public ChoseCharacterState(IMenuState menu) : base(menu)
     {
         api = GameObject.FindObjectOfType<APIManager>();
         notifManager = GameObject.FindObjectOfType<NotificationManager>();
     }
-    public async override void Enter()
+
+    public override void Enter()
     {
         CreateContinue = GameObject.Find("NewContinueThings").transform;
         newButt = CreateContinue.Find("New").GetComponent<Button>();
         continueButt = CreateContinue.Find("Continue").GetComponent<Button>();
         contextButt = CreateContinue.Find("CrearContexto").GetComponent<Button>();
 
-        CreateContinue.transform.SetAsLastSibling();
-        Event.RaiseMenuChanged();
-        TransicionEnter();
+        newButt.gameObject.SetActive(true);
+        continueButt.gameObject.SetActive(true);
+        contextButt.gameObject.SetActive(true);
 
         newButt.interactable = true;
         continueButt.interactable = true;
         contextButt.interactable = true;
+
+        CreateContinue.transform.SetAsLastSibling();
+
+        newButt.onClick.RemoveAllListeners();
+        continueButt.onClick.RemoveAllListeners();
+        contextButt.onClick.RemoveAllListeners();
 
         newButt.onClick.AddListener(() => {
             CheckIfContextIsCreated();
@@ -51,56 +55,46 @@ public class ChoseCharacterState : AbstractMenuState
             newState = new UploaderState(menu);
             TransicionExit();
         });
+
+        Event.RaiseMenuChanged();
+        TransicionEnter();
     }
 
     private void CheckIfContextIsCreated()
     {
-        api.GetRootFolder((rutaServidor) => {
-            if (string.IsNullOrEmpty(rutaServidor))
+        newButt.interactable = false;
+
+        api.GetAllCharacters((listaPersonajes) => {
+            if (listaPersonajes != null)
             {
-                Debug.LogWarning("Contexto no detectado (Ruta vacía o error de red)");
-                notifManager.ShowNotification("Context not created yet", Color.red, 2f);
+                Debug.Log("Conexión con servidor establecida. Procediendo a nuevo juego.");
+                newState = new NewGameState(menu);
+                TransicionExit();
             }
             else
             {
-                Debug.Log("Contexto detectado: " + rutaServidor);
-                newState = new NewGameState(menu);
-                TransicionExit();
+                Debug.LogWarning("No se puede iniciar juego: Error de comunicación o contexto no inicializado.");
+                notifManager.ShowNotification("Server not ready or Context missing", Color.red, 2f);
+                newButt.interactable = true; // Reactivar si falla
             }
         });
     }
 
-    public override void Exit() //Reset por si vuelve atrás
-    {
-
-    }
-
-    public override void FixedUpdate()
-    {
-    }
-
-    public override async void TransicionEnter()
-    {
-        newButt.gameObject.SetActive(true);
-        continueButt.gameObject.SetActive(true);
-        contextButt.gameObject.SetActive(true);
-
-
-        newButt.onClick.RemoveAllListeners();
-        continueButt.onClick.RemoveAllListeners();
-        contextButt.onClick.RemoveAllListeners();
-    }
     public override async void TransicionExit()
     {
-        newButt.gameObject.SetActive(false);
-        continueButt.gameObject.SetActive(false);
-        contextButt.gameObject.SetActive(false);
+        if (newButt != null) newButt.gameObject.SetActive(false);
+        if (continueButt != null) continueButt.gameObject.SetActive(false);
+        if (contextButt != null) contextButt.gameObject.SetActive(false);
+
+        if (newButt != null) newButt.onClick.RemoveAllListeners();
+        if (continueButt != null) continueButt.onClick.RemoveAllListeners();
+        if (contextButt != null) contextButt.onClick.RemoveAllListeners();
 
         menu.SetState(newState);
     }
-    public override void Update()
-    {
 
-    }
-
+    public override void Exit() { }
+    public override void FixedUpdate() { }
+    public override void Update() { }
+    public override void TransicionEnter() { }
 }
