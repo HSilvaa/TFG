@@ -1,251 +1,205 @@
 import os
 import sys
 import io
-import traceback
-from datetime import datetime
-
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 import json
-from typing import List
+import re
+from datetime import datetime
+from typing import List, Dict
 
-import PyPDF2
+# Evitar problemas de encoding en servidores externos
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+
 import faiss
+import PyPDF2
+from docx import Document
 from sentence_transformers import SentenceTransformer
 
-from docx import Document
-
 # ========== CONFIGURACIÓN ==========
-DATA_DIR = "docs"
 INDEX_DIR = "indices"
+CHARACTERS_DIR = "characters"
 os.makedirs(INDEX_DIR, exist_ok=True)
+os.makedirs(CHARACTERS_DIR, exist_ok=True)
 
-EPOCHS = [d for d in os.listdir(DATA_DIR) if os.path.isdir(os.path.join(DATA_DIR, d))]
-
+# Modelo global optimizado para rendimiento
 model = SentenceTransformer("sentence-transformers/all-mpnet-base-v2")
-def crear_o_actualizar_indice_personaje(personaje_name: str, pregunta: str, respuesta: str):
-    """
-    Guarda la interacción literal (Usuario + NPC) en el índice FAISS y en JSON.
-    """
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    CHARACTERS_DIR = os.path.join(BASE_DIR, "characters")
-    os.makedirs(CHARACTERS_DIR, exist_ok=True)
 
-    try:
-        index_path = os.path.join(CHARACTERS_DIR, f"personaje_{personaje_name}.index")
-        docs_path = os.path.join(CHARACTERS_DIR, f"personaje_{personaje_name}_summaries.json")
-
-        timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-
-        # Construir interacción literal
-        interaccion_literal = f"User: {pregunta}\nAssistant: {respuesta}"
-        nuevo_chunk = {
-            "User": pregunta,
-            "Assistant": respuesta,
-            "timestamp": timestamp
-        }
-
-        # Crear embedding de la interacción completa
-        embedding_nuevo = model.encode([interaccion_literal], convert_to_numpy=True, normalize_embeddings=True)
-
-        # Cargar o crear índice FAISS
-        if os.path.exists(index_path):
-            index = faiss.read_index(index_path)
-        else:
-            index = faiss.IndexFlatIP(embedding_nuevo.shape[1])
-
-        index.add(embedding_nuevo.astype("float32"))
-        faiss.write_index(index, index_path)
-
-        # Guardar en JSON
-        if os.path.exists(docs_path):
-            with open(docs_path, "r", encoding="utf-8") as f:
-                documentos = json.load(f)
-        else:
-            documentos = []
-
-        documentos.append(nuevo_chunk)
-
-        with open(docs_path, "w", encoding="utf-8") as f:
-            json.dump(documentos, f, ensure_ascii=False, indent=2)
-
-        print(f"✅ Interacción guardada en índice y JSON para '{personaje_name}'")
-
-    except Exception:
-        print("❌ ERROR en guardar_interaccion_personaje:")
-        traceback.print_exc()
-
-# =====================================================================================================================
-#                                             FAISS MUNDO
-# =====================================================================================================================
-
-def eliminar_todos_los_indices():
-    print("Eliminando todos los índices del mundo y personajes...")
-
-    # === Eliminar índices del mundo (épocas) ===
-    for archivo in os.listdir(INDEX_DIR):
-        if archivo.endswith(".index") or archivo.endswith("_docs.json"):
-            ruta_archivo = os.path.join(INDEX_DIR, archivo)
-            try:
-                os.remove(ruta_archivo)
-                print(f"🗑️ Eliminado (mundo): {archivo}")
-            except Exception as e:
-                print(f"⚠️ Error al eliminar {archivo}: {e}")
-
-    # === Eliminar índices de personajes ===
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    CHARACTERS_DIR = os.path.join(BASE_DIR, "characters")
-
-    if os.path.exists(CHARACTERS_DIR):
-        for archivo in os.listdir(CHARACTERS_DIR):
-            if archivo.endswith(".index") or archivo.endswith("_summaries.json"):
-                ruta_archivo = os.path.join(CHARACTERS_DIR, archivo)
-                try:
-                    os.remove(ruta_archivo)
-                    print(f"🗑️ Eliminado (personaje): {archivo}")
-                except Exception as e:
-                    print(f"⚠️ Error al eliminar {archivo}: {e}")
-
-    print("✅ Limpieza completa de índices y personajes.")
-def eliminar_saltos_de_linea(texto):
-    # Reemplaza los saltos de línea dentro del texto por un espacio
-    texto_sin_saltos = "".join(texto.splitlines())
-    return texto_sin_saltos
 
 # =======================
-# Extrae un pdf y lo divide en chunks
+# Utilidades de Procesamiento Optimizado
 # =======================
-def extraer_texto_de_pdf_en_chunks(ruta_pdf: str, chunk_size: int = 1000) -> List[str]:
+
+def limpiar_texto(texto: str) -> str:
+    """Normaliza el texto para mejorar la calidad del embedding."""
+    # Eliminar saltos de línea y tabulaciones
+    texto = re.sub(r'[\r\n\t]+', ' ', texto)
+    # Eliminar espacios múltiples
+    texto = re.sub(r'\s+', ' ', texto)
+    return texto.strip()
+
+
+def dividir_texto_en_chunks_optimizados(texto: str, size: int = 600, overlap: int = 100) -> List[str]:
+    """
+    Divide el texto con solapamiento (overlap) para no perder contexto en los cortes.
+    """
+    texto = limpiar_texto(texto)
+    if len(texto) <= size:
+        return [texto]
+
     chunks = []
-    texto_completo = ""
+    start = 0
+    while start < len(texto):
+        end = start + size
+        chunk = texto[start:end]
+        chunks.append(chunk)
+        # El inicio del siguiente chunk retrocede la cantidad de 'overlap'
+        start += (size - overlap)
 
-    try:
-        with open(ruta_pdf, 'rb') as file:
-            reader = PyPDF2.PdfReader(file)
+        # Evitar bucles infinitos si el tamaño es menor al overlap
+        if size <= overlap: break
 
-            for page in reader.pages:
-                texto_pagina = page.extract_text()
-                if texto_pagina:
-                    texto_pagina = eliminar_saltos_de_linea(texto_pagina)
-                    texto_completo += texto_pagina + "\n"
+    return [c for c in chunks if len(c) > 50]  # Ignorar chunks residuales muy cortos
 
-            # Dividir el texto completo en chunks
-            for i in range(0, len(texto_completo), chunk_size):
-                chunk = texto_completo[i:i + chunk_size].strip()
-                if chunk:
-                    chunks.append(chunk)
-
-    except Exception as e:
-        print(f"Error al procesar el PDF {ruta_pdf}: {e}")
-
-    return chunks
 
 # =======================
-# Dividir texto plano en chunks
-# =======================
-def dividir_texto_en_chunks(texto: str, chunk_size: int = 500) -> List[str]: #Framentos pequeños funciona mejor la busqueda por semántica
-    texto = eliminar_saltos_de_linea(texto)
-    chunks = [texto[i:i + chunk_size].strip() for i in range(0, len(texto), chunk_size)]
-    return [c for c in chunks if c]  # Eliminar chunks vacíos
-
-# =======================
-#
+# Extractores de Archivos con Trazabilidad
 # =======================
 
-def extraer_texto_docx(ruta_archivo):
-    try:
-        doc = Document(ruta_archivo)
-        texto = "\n".join([p.text for p in doc.paragraphs])
-        return dividir_texto_en_chunks(texto)
-    except Exception as e:
-        print(f"Error al procesar {ruta_archivo}: {e}")
-        return []
+def extraer_datos_directorio(path_directorio: str) -> List[Dict[str, str]]:
+    """
+    Lee archivos y devuelve una lista de diccionarios con contenido y origen (metadatos).
+    """
+    datos_procesados = []
+    if not os.path.exists(path_directorio):
+        return datos_procesados
 
-def cargar_textos_de_epoca(epoca_path):
-    documentos = []
+    for nombre_archivo in os.listdir(path_directorio):
+        ruta_completa = os.path.join(path_directorio, nombre_archivo)
+        if not os.path.isfile(ruta_completa): continue
 
-    for nombre_archivo in os.listdir(epoca_path):
-        ruta_completa = os.path.join(epoca_path, nombre_archivo)
-
-        if not os.path.isfile(ruta_completa):
-            continue  # Ignora subcarpetas si las hubiera
-
-        if nombre_archivo.endswith(".txt"):
-            try:
+        texto_archivo = ""
+        try:
+            if nombre_archivo.endswith(".txt"):
                 with open(ruta_completa, "r", encoding="utf-8") as f:
-                    texto = f.read().strip()
-                    if texto:
-                        documentos.extend(dividir_texto_en_chunks(texto))
-            except Exception as e:
-                print(f"Error leyendo TXT {ruta_completa}: {e}")
+                    texto_archivo = f.read()
+            elif nombre_archivo.endswith(".docx"):
+                doc = Document(ruta_completa)
+                texto_archivo = " ".join([p.text for p in doc.paragraphs])
+            elif nombre_archivo.endswith(".pdf"):
+                with open(ruta_completa, 'rb') as file:
+                    reader = PyPDF2.PdfReader(file)
+                    texto_archivo = " ".join([page.extract_text() or "" for page in reader.pages])
 
-        elif nombre_archivo.endswith(".docx"):
-            documentos.extend(extraer_texto_docx(ruta_completa))
+            if texto_archivo:
+                chunks = dividir_texto_en_chunks_optimizados(texto_archivo)
+                for c in chunks:
+                    datos_procesados.append({
+                        "text": c,
+                        "source": nombre_archivo
+                    })
+        except Exception as e:
+            print(f"Error procesando {nombre_archivo}: {e}")
 
-        elif nombre_archivo.endswith(".pdf"):
-            chunks = extraer_texto_de_pdf_en_chunks(ruta_completa)
-            if chunks:
-                documentos.extend(chunks)
-        else:
-            print(f"Formato no reconocido: {nombre_archivo}")
+    return datos_procesados
 
-    return documentos
 
-def crear_indice_si_no_existe(epoca, documentos):
-    index_path = os.path.join(INDEX_DIR, f"{epoca}.index")
-    docs_path = os.path.join(INDEX_DIR, f"{epoca}_docs.json")
+# =======================
+# Gestión de Índices FAISS
+# =======================
 
-    if os.path.exists(index_path) and os.path.exists(docs_path):
-        print(f"🟡 Índice de '{epoca}' ya existe. Saltando.")
-        return
+def crear_indice_faiss_avanzado(nombre_indice: str, datos: List[Dict[str, str]]):
+    """Crea índice FAISS y guarda JSON con metadatos."""
+    if not datos: return
 
-    print(f"✅ Creando índice para la época: {epoca}")
-    # Normalizar los embeddings
-    embeddings = model.encode(documentos, convert_to_numpy=True, normalize_embeddings=True)
+    index_path = os.path.join(INDEX_DIR, f"{nombre_indice}.index")
+    docs_path = os.path.join(INDEX_DIR, f"{nombre_indice}_docs.json")
+
+    textos = [d["text"] for d in datos]
+
+    print(f"Generando embeddings de alta precisión para: {nombre_indice}")
+    embeddings = model.encode(textos, convert_to_numpy=True, normalize_embeddings=True)
 
     dim = embeddings.shape[1]
-    index = faiss.IndexFlatIP(dim)  # Cambiar a Inner Product
+    # IndexFlatIP es excelente para similitud de coseno con vectores normalizados
+    index = faiss.IndexFlatIP(dim)
     index.add(embeddings.astype("float32"))
+
     faiss.write_index(index, index_path)
 
+    # Guardamos la lista de diccionarios (texto + origen)
+    with open(docs_path, "w", encoding="utf-8") as f:
+        json.dump(datos, f, ensure_ascii=False, indent=2)
+    print(f"Índice optimizado '{nombre_indice}' guardado con éxito.")
+
+
+# =======================
+# Memoria de Personaje (Short-Term & Long-Term Memory)
+# =======================
+
+def actualizar_memoria_personaje(personaje_name: str, pregunta: str, respuesta: str):
+    """
+    Optimizado: Guarda las interacciones con metadatos temporales.
+    """
+    index_path = os.path.join(CHARACTERS_DIR, f"personaje_{personaje_name}.index")
+    docs_path = os.path.join(CHARACTERS_DIR, f"personaje_{personaje_name}_docs.json")
+
+    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    # Formato de memoria narrativa para que el modelo lo entienda mejor al recuperar
+    texto_memoria = f"El día {timestamp}, el usuario preguntó: '{pregunta}' y yo respondí: '{respuesta}'"
+
+    nuevo_dato = {
+        "text": texto_memoria,
+        "raw_user": pregunta,
+        "raw_npc": respuesta,
+        "date": timestamp
+    }
+
+    embedding = model.encode([texto_memoria], convert_to_numpy=True, normalize_embeddings=True)
+
+    if os.path.exists(index_path):
+        index = faiss.read_index(index_path)
+    else:
+        index = faiss.IndexFlatIP(embedding.shape[1])
+
+    index.add(embedding.astype("float32"))
+    faiss.write_index(index, index_path)
+
+    documentos = []
+    if os.path.exists(docs_path):
+        with open(docs_path, "r", encoding="utf-8") as f:
+            documentos = json.load(f)
+
+    documentos.append(nuevo_dato)
     with open(docs_path, "w", encoding="utf-8") as f:
         json.dump(documentos, f, ensure_ascii=False, indent=2)
 
-    print(f"🧠 Guardado índice y documentos para '{epoca}' en {INDEX_DIR}/")
-#==============
-#  TESTING
-#==============
-def construir_todos_los_indices():
-    for epoca in EPOCHS:
-        epoca_path = os.path.join(DATA_DIR, epoca)
-        documentos = cargar_textos_de_epoca(epoca_path)
-        if documentos:
-            crear_indice_si_no_existe(epoca, documentos)
-        else:
-            print(f"⚠️ No se encontraron documentos en {epoca_path}")
 
+# =======================
+# Integración con API Unity
+# =======================
 
-#==============
-#  REAL USED
-#==============
-def construir_todos_los_indices_Unity(rootPath):
+def construir_todos_los_indices_Unity(rootPath: str):
+    """Punto de entrada principal para el servidor remoto."""
     if not os.path.exists(rootPath):
-        print(f"Ruta no encontrada: {rootPath}")
+        print(f"Ruta de uploads no válida: {rootPath}")
         return
 
-    epocas = [d for d in os.listdir(rootPath) if os.path.isdir(os.path.join(rootPath, d))]
+    nombre_contexto = os.path.basename(os.path.normpath(rootPath))
+    print(f"Iniciando optimización de contexto para: {nombre_contexto}")
 
-    for epoca in epocas:
-        epoca_path = os.path.join(rootPath, epoca)
-        print(f"EPOCA PATH: {epoca_path}")
-        documentos = cargar_textos_de_epoca(epoca_path)
-        if documentos:
-            crear_indice_si_no_existe(epoca, documentos)
-        else:
-            print(f"No se encontraron documentos en {epoca_path}")
+    datos = extraer_datos_directorio(rootPath)
+    if datos:
+        crear_indice_faiss_avanzado(nombre_contexto, datos)
+    else:
+        print(f"No hay contenido para indexar en {rootPath}")
 
-if __name__ == "__main__":
-    #construir_todos_los_indices()
-    #eliminar_todos_los_indices()
-    #construir_todos_los_indices_Unity("C://Users//hugop//Desktop//PRUEBAS")
-    # prueba de log
-    crear_o_actualizar_indice_personaje("Paco", "ESTE ES EL MENSAJE 2 PARA EL LOG.")
+
+def eliminar_todos_los_indices():
+    """Limpieza profunda de memoria."""
+    for d in [INDEX_DIR, CHARACTERS_DIR]:
+        if os.path.exists(d):
+            for f in os.listdir(d):
+                try:
+                    os.remove(os.path.join(d, f))
+                except:
+                    pass
+    print("Memoria global FAISS purgada.")

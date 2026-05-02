@@ -1,195 +1,166 @@
+import shutil
 import sys
+import os
 import traceback
-from fastapi import FastAPI, HTTPException, Depends
+from typing import List
+from fastapi import FastAPI, HTTPException, Depends, UploadFile, File
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 import crud
 import database
-from FaissTry18_04 import interactuar, resumir
+from FaissTry18_04 import interactuar
 from faiss_index_builder import construir_todos_los_indices_Unity, eliminar_todos_los_indices
 
-# Configuración de salida
 sys.stdout.reconfigure(line_buffering=True)
+UPLOAD_DIR = "uploads/context_files"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-app = FastAPI(title="AIGERIM AI API")
-
-# Inicializar Base de Datos (Crea tablas si no existen)
+app = FastAPI(title="AIGERIM AI API - V2")
 database.init_db()
 
 
-
-# ========== MODELOS DE PETICIÓN (Pydantic) ==========
-
-class QueryText(BaseModel):
-    text: str  # Se usa para rutas de carpetas o textos generales
-
+# ========== MODELOS ==========
 class CharacterCreate(BaseModel):
     Name: str
     Age: str
     Description: str
     Epoca: str
 
+
 class MessageRequest(BaseModel):
     message: str
-    id: int  # Character ID
 
-class HistorialText(BaseModel):
-    historial: str
-    characterName: str
 
-@app.get("/status")
-def get_status():
+# ========== ENDPOINTS DE ARCHIVOS Y CONTEXTO ==========
+
+# --- ENDPOINT 1: SUBIR Y PERSISTIR ---
+@app.post("/context/{folder_name}/upload")
+async def upload_files_to_folder(folder_name: str, files: List[UploadFile] = File(...)):
     """
-    Endpoint de control para que Unity sepa que el servidor está listo.
+    Recibe archivos y los guarda en una subcarpeta dentro de 'uploads/'.
+    Solo acepta archivos de texto (mimetype text/plain).
     """
-    print("LOG: Unity ha consultado el estado - Servidor Activo")
-    return {"status": "ok"}
+    target_path = os.path.join("uploads", folder_name)
+    os.makedirs(target_path, exist_ok=True)
 
-# ========== ENDPOINTS DE CONTEXTO Y MUNDO ==========
+    saved_files = []
+    for file in files:
+        # Validación de tipo de contenido
+        if file.content_type != "text/plain":
+            continue
 
-@app.post("/CrearContexto")
-def create_contexto(query: QueryText):
-    """Limpia índices antiguos y genera nuevos desde la ruta especificada."""
+        file_location = os.path.join(target_path, file.filename)
+        with open(file_location, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        saved_files.append(file.filename)
+
+    return {"status": "files_persisted", "folder": folder_name, "total": len(saved_files)}
+
+
+# --- ENDPOINT 2: CONSTRUIR ÍNDICE (SAVE) ---
+@app.post("/context/{folder_name}/save")
+def build_index_from_persisted_folder(folder_name: str, db: Session = Depends(database.get_db)):
+    """
+    Toma los archivos ya persistidos en la carpeta especificada y construye FAISS.
+    """
     try:
+        # 1. Registrar en la DB que esta es la carpeta activa
+        folder = crud.update_or_create_root_folder(db, folder_name)
+
+        # 2. Construir índices usando la ruta interna generada
         eliminar_todos_los_indices()
-        construir_todos_los_indices_Unity(query.text)
-        return {"contextCreated": "True", "path": query.text}
+        construir_todos_los_indices_Unity(folder.route)
+
+        return {
+            "status": "success",
+            "message": f"Index created from folder: {folder_name}",
+            "files_processed_from": folder.route
+        }
     except Exception as e:
-        print(f"Error al crear contexto: {e}")
-        return {"contextCreated": "False", "error": str(e)}
+        raise HTTPException(status_code=500, detail=f"Error building index: {str(e)}")
 
 
-# ========== ENDPOINTS DE PERSONAJES (CRUD) ==========
+# ========== ENDPOINTS DE PERSONAJES (JERÁRQUICOS) ==========
+
+@app.get("/characters")
+def get_characters(db: Session = Depends(database.get_db)):
+    """Lista todos los personajes."""
+    chars = crud.get_characters(db)
+    return chars
+
 
 @app.post("/characters")
-def create_character(char_data: CharacterCreate, db: Session = Depends(database.get_db)):
-    """Añade un nuevo personaje a la SQLite compartida."""
+def post_character(char_data: CharacterCreate, db: Session = Depends(database.get_db)):
+    """Crea un nuevo personaje."""
     try:
         new_char = crud.add_character(
-            db, 
-            name=char_data.Name, 
-            age=char_data.Age, 
-            description=char_data.Description, 
+            db,
+            name=char_data.Name,
+            age=char_data.Age,
+            description=char_data.Description,
             epoca=char_data.Epoca
         )
-        return {"status": "success", "id": new_char.Id}
+        return new_char
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.get("/characters/{char_id}")
-def get_character(char_id: int, db: Session = Depends(database.get_db)):
-    """Obtiene los datos de un personaje por ID."""
+def get_character_by_id(char_id: int, db: Session = Depends(database.get_db)):
+    """Obtiene el JSON de un personaje específico."""
     char = crud.get_character_by_id(db, char_id)
     if not char:
         raise HTTPException(status_code=404, detail="Character not found")
-    return {
-        "Id": char.Id,
-        "Name": char.Name,
-        "Age": char.Age,
-        "Description": char.Description,
-        "Epoca": char.Epoca
-    }
-@app.get("/characters")
-def get_all_characters(db: Session = Depends(database.get_db)):
-    """Obtiene la lista de todos los personajes guardados en la base de datos."""
-    try:
-        characters = crud.get_characters(db)
-        return [
-            {
-                "Id": char.Id,
-                "Name": char.Name,
-                "Age": char.Age,
-                "Description": char.Description,
-                "Epoca": char.Epoca
-            } for char in characters
-        ]
-    except Exception as e:
-        print(f"Error al obtener personajes: {e}")
-        raise HTTPException(status_code=500, detail="Error interno al listar personajes")
+    return char
+
 
 @app.delete("/characters/{char_id}")
-def delete_character_endpoint(char_id: int, db: Session = Depends(database.get_db)):
-    try:
-        success = crud.delete_character(db, char_id)
-        if success:
-            # Opcional: Aquí podrías añadir lógica para borrar
-            # físicamente los archivos .index del personaje si lo deseas.
-            return {"status": "success", "message": f"Character {char_id} deleted"}
+def delete_character(char_id: int, db: Session = Depends(database.get_db)):
+    """Borra un personaje."""
+    success = crud.delete_character(db, char_id)
+    if not success:
         raise HTTPException(status_code=404, detail="Character not found")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    return {"status": "success", "message": f"Character {char_id} deleted"}
 
-# ========== ENDPOINTS DE CONVERSACIÓN ==========
 
-@app.post("/send")
-def send_message(request: MessageRequest, db: Session = Depends(database.get_db)):
-    """Endpoint principal para hablar con el NPC."""
+# ========== ENDPOINTS DE CHAT (RECURSOS HIJOS) ==========
+
+@app.post("/characters/{char_id}/chat")
+def character_chat(char_id: int, request: MessageRequest):
     try:
-        # La función interactuar ya gestiona FAISS, OpenAI y el guardado en DB
-        resultado = interactuar(request.message, request.id)
+        # interactuar ya gestiona la lógica de recuperación RAG
+        resultado = interactuar(request.message, char_id)
         return {"response": resultado}
     except Exception as e:
         traceback.print_exc()
-        return {"error": str(e)}
+        raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/conversations/{char_id}")
-def get_conversations(char_id: int, db: Session = Depends(database.get_db)):
-    """Devuelve el historial literal de conversaciones."""
+
+@app.get("/characters/{char_id}/conversations")
+def get_character_conversations(char_id: int, db: Session = Depends(database.get_db)):
     convs = crud.get_conversations(db, char_id)
     return [c.Historial for c in convs]
 
-@app.post("/resumir")
-def resumir_endpoint(historial: HistorialText):
-    """Genera un resumen de la conversación y actualiza el índice del personaje."""
-    try:
-        resumen_txt = resumir(historial.historial, historial.characterName)
-        return {"resumen": resumen_txt}
-    except Exception as e:
-        return {"error": str(e)}
 
-# ========== EXTRA: GESTIÓN DE CARPETAS ==========
+# ========== MANTENIMIENTO ==========
 
-@app.post("/UpdateRootFolder")
-def update_root_folder(query: QueryText, db: Session = Depends(database.get_db)):
-    try:
-        folder = crud.update_or_create_root_folder(db, "RootFolder", query.text)
-
-        construir_todos_los_indices_Unity(query.text)
-
-        return {"status": "success", "route": folder.Route}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/folders/{folder_id}")
-def get_folder(folder_id: int, db: Session = Depends(database.get_db)):
-    folder = crud.get_folder_by_id(db, folder_id)
-    if not folder:
-        raise HTTPException(status_code=404, detail="Folder not found")
-    return {
-        "Id": folder.Id,
-        "Name": folder.Name,
-        "Route": folder.Route
-    }
-
-@app.post("/resetDB")
-def reset_database_endpoint(db: Session = Depends(database.get_db)):
-    """
-    Borra todos los datos de la DB SQL y elimina los índices FAISS
-    de mundo y personajes.
-    """
+@app.post("/system/reset")
+def reset_database(db: Session = Depends(database.get_db)):
+    """Borra todo (DB y FAISS)."""
     try:
         crud.reset_all_tables(db)
         eliminar_todos_los_indices()
+        # Opcional: borrar archivos de UPLOAD_DIR
+        for f in os.listdir(UPLOAD_DIR):
+            os.remove(os.path.join(UPLOAD_DIR, f))
 
-        print("⚠️ Base de datos y archivos de índices reseteados por completo.")
-        return {"status": "success", "message": "Base de datos y memorias FAISS reiniciadas"}
-
+        return {"status": "success", "message": "System reset complete"}
     except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Error al resetear la DB: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=5000)
-    #python -m uvicorn APIPython:app --host 127.0.0.1 --port 8000
+
+    uvicorn.run(app, host="0.0.0.0", port=8080)
