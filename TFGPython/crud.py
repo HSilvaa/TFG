@@ -37,11 +37,11 @@ def add_conversation(db: Session, character_id: int, user_m: str, npc_m: str):
     db.refresh(new_convo)
     return new_convo
 
-def get_conversations(db: Session, character_id: int, limit: int = 10):
+def get_conversations(db: Session, character_id: int):
     return db.query(Conversation)\
              .filter(Conversation.character_id == character_id)\
-             .order_by(Conversation.created_at.desc())\
-             .limit(limit).all()
+             .order_by(Conversation.created_at.asc())\
+             .all()
 
 # ===========================
 # GESTIÓN DE RESUMEN (MEMORIA LARGO PLAZO)
@@ -63,10 +63,8 @@ def update_or_create_resumen(db: Session, character_id: int, text: str):
 # ===========================
 
 def update_or_create_root_folder(db: Session, name: str):
-    # Definimos la ruta interna basándonos solo en el nombre
     internal_route = os.path.join("uploads", name)
 
-    # Buscamos si ya existe una configuración de carpeta (usando ID 1 como "puntero" a la activa)
     db_folder = db.query(Folder).filter(Folder.id == 1).first()
 
     if db_folder:
@@ -82,7 +80,6 @@ def update_or_create_root_folder(db: Session, name: str):
 
 def reset_all_tables(db: Session):
     try:
-        # Borrado en orden para respetar FK si no hay cascade
         db.query(Conversation).delete()
         db.query(Resumen).delete()
         db.query(Character).delete()

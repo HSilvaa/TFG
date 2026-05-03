@@ -6,7 +6,6 @@ import re
 from datetime import datetime
 from typing import List, Dict
 
-# Evitar problemas de encoding en servidores externos
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 import faiss
@@ -14,13 +13,11 @@ import PyPDF2
 from docx import Document
 from sentence_transformers import SentenceTransformer
 
-# ========== CONFIGURACIÓN ==========
 INDEX_DIR = "indices"
 CHARACTERS_DIR = "characters"
 os.makedirs(INDEX_DIR, exist_ok=True)
 os.makedirs(CHARACTERS_DIR, exist_ok=True)
 
-# Modelo global optimizado para rendimiento
 model = SentenceTransformer("sentence-transformers/all-mpnet-base-v2")
 
 
@@ -107,32 +104,46 @@ def extraer_datos_directorio(path_directorio: str) -> List[Dict[str, str]]:
 # =======================
 
 def crear_indice_faiss_avanzado(nombre_indice: str, datos: List[Dict[str, str]]):
-    """Crea índice FAISS y guarda JSON con metadatos."""
-    if not datos: return
+    """
+    Crea o Reconstruye (Update) el índice FAISS y el JSON de metadatos.
+    """
+    if not datos:
+        print(f"Advertencia: No hay datos para procesar en el índice '{nombre_indice}'")
+        return
 
     index_path = os.path.join(INDEX_DIR, f"{nombre_indice}.index")
     docs_path = os.path.join(INDEX_DIR, f"{nombre_indice}_docs.json")
 
+    # Verificación de existencia para log
+    if os.path.exists(index_path):
+        print(f"Actualizando/Reconstruyendo índice existente: {nombre_indice}")
+    else:
+        print(f"Creando nuevo índice: {nombre_indice}")
+
     textos = [d["text"] for d in datos]
 
-    print(f"Generando embeddings de alta precisión para: {nombre_indice}")
+    print(f"Generando embeddings de alta precisión para {len(textos)} chunks...")
+    # normalize_embeddings=True junto con IndexFlatIP equivale a Similitud de Coseno
     embeddings = model.encode(textos, convert_to_numpy=True, normalize_embeddings=True)
 
     dim = embeddings.shape[1]
-    # IndexFlatIP es excelente para similitud de coseno con vectores normalizados
+
+    # Creamos un nuevo objeto de índice
+    # Usamos FlatIP porque es el más preciso para comparaciones de documentos
     index = faiss.IndexFlatIP(dim)
     index.add(embeddings.astype("float32"))
 
+    # Guardar el índice (esto sobreescribe el archivo si ya existe)
     faiss.write_index(index, index_path)
 
-    # Guardamos la lista de diccionarios (texto + origen)
+    # Guardar los metadatos (esto sobreescribe el JSON si ya existe)
     with open(docs_path, "w", encoding="utf-8") as f:
         json.dump(datos, f, ensure_ascii=False, indent=2)
-    print(f"Índice optimizado '{nombre_indice}' guardado con éxito.")
 
+    print(f"Operación finalizada: Índice '{nombre_indice}' sincronizado con éxito.")
 
 # =======================
-# Memoria de Personaje (Short-Term & Long-Term Memory)
+# Memoria de Personaje (Short-Term y Long-Term Memory)
 # =======================
 
 def actualizar_memoria_personaje(personaje_name: str, pregunta: str, respuesta: str):
@@ -178,19 +189,23 @@ def actualizar_memoria_personaje(personaje_name: str, pregunta: str, respuesta: 
 # =======================
 
 def construir_todos_los_indices_Unity(rootPath: str):
-    """Punto de entrada principal para el servidor remoto."""
+    """
+    Punto de entrada: Detecta el contexto y dispara la creación/actualización.
+    """
     if not os.path.exists(rootPath):
-        print(f"Ruta de uploads no válida: {rootPath}")
+        print(f"Error: La ruta '{rootPath}' no existe en el servidor.")
         return
 
+    # Obtener el nombre de la carpeta (ej. 'LoreMedieval')
     nombre_contexto = os.path.basename(os.path.normpath(rootPath))
-    print(f"Iniciando optimización de contexto para: {nombre_contexto}")
 
+    print(f"Escaneando directorio para contexto: {nombre_contexto}")
     datos = extraer_datos_directorio(rootPath)
+
     if datos:
         crear_indice_faiss_avanzado(nombre_contexto, datos)
     else:
-        print(f"No hay contenido para indexar en {rootPath}")
+        print(f"Cancelado: El directorio '{rootPath}' está vacío.")
 
 
 def eliminar_todos_los_indices():
@@ -202,4 +217,4 @@ def eliminar_todos_los_indices():
                     os.remove(os.path.join(d, f))
                 except:
                     pass
-    print("Memoria global FAISS purgada.")
+    print("Memoria global FAISS eliminada.")

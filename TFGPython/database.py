@@ -22,7 +22,7 @@ engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def init_db():
-    # Crea las tablas si no existen (equivalente al Awake de Unity)
+    # Crea las tablas si no existen
     Base.metadata.create_all(bind=engine)
 
 def get_db():

@@ -1,5 +1,0 @@
-docker run -d ^
-  -p 8000:8000 ^
-  -v aigerim_db_data:/app/BasesDeDatos ^
-  -v "C:\Users\hugop\Desktop\MemoriaDocker":/app/UploadedFiles ^
-  --name TFG_server_2 mitfg-python

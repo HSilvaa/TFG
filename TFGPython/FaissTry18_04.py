@@ -7,7 +7,6 @@ import numpy as np
 import openai
 from datetime import datetime
 
-# Configuración de salida para servidores
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 import crud
@@ -15,10 +14,8 @@ import database
 import faiss
 from sentence_transformers import SentenceTransformer
 
-# Cargar modelo (debe ser el mismo que en el builder)
 model = SentenceTransformer("sentence-transformers/all-mpnet-base-v2")
 
-# Directorios internos del servidor
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CHARACTERS_DIR = os.path.join(BASE_DIR, "characters")
 INDEX_DIR = os.path.join(BASE_DIR, "indices")
@@ -56,7 +53,7 @@ def buscar_contexto(epoca, pregunta, k=4):
     resultados = []
     for i in range(len(I[0])):
         idx = I[0][i]
-        score = D[0][i]  # Este es el Coseno de Similitud
+        score = D[0][i]
 
         if idx != -1 and idx < len(docs):
             item = docs[idx]
@@ -197,7 +194,6 @@ def interactuar(pregunta, character_id):
         print(f"\n✨ RESPUESTA GENERADA:\n\"{respuesta_final}\"")
         print(f"{'=' * 60}\n")
 
-        # Persistir Interacción
         crud.add_conversation(db, character.id, pregunta, respuesta_final)
         from faiss_index_builder import actualizar_memoria_personaje
         actualizar_memoria_personaje(character.name, pregunta, respuesta_final)

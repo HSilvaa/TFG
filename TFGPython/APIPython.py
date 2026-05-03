@@ -34,7 +34,6 @@ class MessageRequest(BaseModel):
 
 # ========== ENDPOINTS DE ARCHIVOS Y CONTEXTO ==========
 
-# --- ENDPOINT 1: SUBIR Y PERSISTIR ---
 @app.get("/contexts")
 def get_all_contextos():
     """
@@ -67,9 +66,6 @@ async def upload_files_to_folder(folder_name: str, files: List[UploadFile] = Fil
 
 @app.post("/context/{folder_name}/save")
 def build_index_from_persisted_folder(folder_name: str, db: Session = Depends(database.get_db)):
-    """
-    Construye el índice para una carpeta específica sin borrar los demás.
-    """
     try:
         folder = crud.update_or_create_root_folder(db, folder_name)
 
@@ -127,7 +123,7 @@ def delete_character(char_id: int, db: Session = Depends(database.get_db)):
     return {"status": "success", "message": f"Character {char_id} deleted"}
 
 
-# ========== ENDPOINTS DE CHAT (RECURSOS HIJOS) ==========
+# ========== ENDPOINTS DE CHAT  ==========
 
 @app.post("/characters/{char_id}/chat")
 def character_chat(char_id: int, request: MessageRequest):
@@ -142,8 +138,17 @@ def character_chat(char_id: int, request: MessageRequest):
 
 @app.get("/characters/{char_id}/conversations")
 def get_character_conversations(char_id: int, db: Session = Depends(database.get_db)):
-    convs = crud.get_conversations(db, char_id)
-    return [c.Historial for c in convs]
+    try:
+        convs = crud.get_conversations(db, char_id)
+
+        if not convs:
+            return []
+
+        return [f"User: {c.message_user}\nAssistant: {c.message_npc}" for c in convs]
+
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ========== MANTENIMIENTO ==========
