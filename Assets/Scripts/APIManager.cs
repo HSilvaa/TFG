@@ -9,9 +9,9 @@ using System.IO;
 public class APIManager : MonoBehaviour
 {
     [Header("Configuración")]
-    [SerializeField] private string baseUrl = "http://127.0.0.1:8000";
+    [SerializeField] private string baseUrl = "http://127.0.0.1:8000"; 
 
-    // ========== MODELOS DE DATOS (Matching Python V2) ==========
+    // ========== MODELOS DE DATOS ==========
 
     [Serializable]
     public class CharacterData
@@ -35,24 +35,17 @@ public class APIManager : MonoBehaviour
         public string message;
     }
 
-    [Serializable]
-    public class FolderData
-    {
-        public int id;
-        public string name;
-        public string route;
-    }
-
     // ========== WRAPPERS PARA RESPUESTAS JSON ==========
-    [Serializable] public class ResponseString { public string response; }
-    [Serializable] public class ResponseStatus { public string status; public string message; }
+    [Serializable]
+    public class ResponseString { public string response; }
+
+    [Serializable]
+    public class Wrapper<T>
+    {
+        public T[] items; 
+    }
 
     // ========== MÉTODOS DE CONTEXTO (ARCHIVOS) ==========
-
-    public void UploadContextFiles(string folderName, List<string> filePaths, Action<string> onSuccess = null)
-    {
-        StartCoroutine(PostUploadFiles($"/context/{folderName}/upload", filePaths, onSuccess));
-    }
 
     public void GetContextos(Action<List<string>> onSuccess)
     {
@@ -70,11 +63,13 @@ public class APIManager : MonoBehaviour
                     onSuccess?.Invoke(new List<string>());
                 }
             }
-            else
-            {
-                onSuccess?.Invoke(new List<string>());
-            }
+            else onSuccess?.Invoke(new List<string>());
         }));
+    }
+
+    public void UploadContextFiles(string folderName, List<string> filePaths, Action<string> onSuccess = null)
+    {
+        StartCoroutine(PostUploadFiles($"/context/{folderName}/upload", filePaths, onSuccess));
     }
 
     public void BuildContextIndex(string folderName, Action<string> onSuccess = null)
@@ -96,17 +91,11 @@ public class APIManager : MonoBehaviour
     public void GetAllCharacters(Action<List<CharacterData>> onSuccess)
     {
         StartCoroutine(GetRequest("/characters", (json) => {
+            if (string.IsNullOrEmpty(json)) { onSuccess?.Invoke(new List<CharacterData>()); return; }
+
             string newJson = "{ \"items\": " + json + "}";
             Wrapper<CharacterData> wrapper = JsonUtility.FromJson<Wrapper<CharacterData>>(newJson);
-            onSuccess?.Invoke(wrapper.items);
-        }));
-    }
-
-    public void GetCharacter(int charId, Action<CharacterData> onSuccess)
-    {
-        StartCoroutine(GetRequest($"/characters/{charId}", (json) => {
-            var res = JsonUtility.FromJson<CharacterData>(json);
-            onSuccess?.Invoke(res);
+            onSuccess?.Invoke(new List<CharacterData>(wrapper.items));
         }));
     }
 
@@ -131,39 +120,57 @@ public class APIManager : MonoBehaviour
     public void GetConversations(int charId, Action<List<string>> onSuccess)
     {
         StartCoroutine(GetRequest($"/characters/{charId}/conversations", (json) => {
-            string newJson = "{ \"items\": " + json + "}";
-            Wrapper<string> wrapper = JsonUtility.FromJson<Wrapper<string>>(newJson);
-            onSuccess?.Invoke(wrapper.items);
+            if (string.IsNullOrEmpty(json) || json == "[]" || json == "null")
+            {
+                onSuccess?.Invoke(new List<string>());
+                return;
+            }
+
+            try
+            {
+                json = json.Trim();
+                string newJson = "{ \"items\": " + json + "}";
+
+                Wrapper<string> wrapper = JsonUtility.FromJson<Wrapper<string>>(newJson);
+
+                if (wrapper != null && wrapper.items != null)
+                    onSuccess?.Invoke(new List<string>(wrapper.items));
+                else
+                    onSuccess?.Invoke(new List<string>());
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"Error parseando historial: {e.Message}. JSON: {json}");
+                onSuccess?.Invoke(new List<string>());
+            }
         }));
     }
 
-    // ========== MANTENIMIENTO ==========
-
-    public void ResetSystem()
-    {
-        StartCoroutine(PostRequest("/system/reset", "{}"));
-    }
+    // ========== MANTENIMIENTO Y STATUS ==========
 
     public void CheckStatus(Action<bool> onResult)
     {
         StartCoroutine(GetRequest("/status", (json) => {
-            onResult?.Invoke(json.Contains("\"status\":\"ok\""));
+            onResult?.Invoke(!string.IsNullOrEmpty(json) && json.Contains("\"status\":\"ok\""));
         }));
     }
 
-    // ========== MOTORES DE PETICIÓN ==========
+    public void ResetSystem(Action<string> callback = null)
+    {
+        StartCoroutine(PostRequest("/system/reset", "{}", callback));
+    }
+
+    // ========== MOTORES DE PETICIÓN (IEnumerator) ==========
 
     IEnumerator PostUploadFiles(string endpoint, List<string> filePaths, Action<string> callback)
     {
         List<IMultipartFormSection> formData = new List<IMultipartFormSection>();
-
         foreach (string path in filePaths)
         {
             if (File.Exists(path))
             {
                 byte[] fileData = File.ReadAllBytes(path);
                 string fileName = Path.GetFileName(path);
-                // "files" es el nombre del parámetro que espera FastAPI: List[UploadFile] = File(...)
                 formData.Add(new MultipartFormFileSection("files", fileData, fileName, "text/plain"));
             }
         }
@@ -215,6 +222,4 @@ public class APIManager : MonoBehaviour
         else
             Debug.LogError($"Error DELETE {endpoint}: {request.error}");
     }
-
-    [Serializable] private class Wrapper<T> { public List<T> items; }
 }

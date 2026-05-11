@@ -163,10 +163,9 @@ public class UploaderState : AbstractMenuState
 
                 bool isDone = false;
 
-                // PASO 1: Subir archivos físicos
+
                 api.UploadContextFiles(folderName, filesInFolder, (res) => {
 
-                    // PASO 2: Construir el índice FAISS para este contexto
                     api.BuildContextIndex(folderName, (indexRes) => {
                         Debug.Log($"Contexto {folderName} sincronizado.");
                         isDone = true;

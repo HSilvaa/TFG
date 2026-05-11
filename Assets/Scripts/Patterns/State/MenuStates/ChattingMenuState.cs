@@ -102,8 +102,6 @@ public class ChattingMenuState : AbstractMenuState
 
             foreach (var item in conversaciones)
             {
-                // El servidor devuelve "User: ... \nAssistant: ..." o solo "User: ..."
-                // Usamos una partición más robusta para evitar errores si el string cambia
                 string[] separators = { "\nAssistant: ", "\nAssistant:", "Assistant: " };
                 string[] parts = item.Split(separators, StringSplitOptions.None);
 
@@ -202,12 +200,16 @@ public class ChattingMenuState : AbstractMenuState
         if (isLoading || currentStartIndex <= 0) return;
         isLoading = true;
 
+        RectTransform containerRect = IAContainer.GetComponent<RectTransform>();
+        float oldHeight = containerRect.rect.height;
+
         int newStartIndex = Mathf.Max(0, currentStartIndex - MaxVisibleMessages);
         if (newStartIndex % 2 != 0) newStartIndex--;
 
-        // Cargamos hacia atrás
         for (int i = currentStartIndex - 2; i >= newStartIndex; i -= 2)
         {
+            if (i < 0) break;
+
             GameObject go = GameObject.Instantiate(mensajePrefab, IAContainer.transform);
             go.SetActive(true);
 
@@ -216,16 +218,23 @@ public class ChattingMenuState : AbstractMenuState
             if (i + 1 < mensajesCargados.Count)
                 go.transform.Find("Assistant").GetComponent<TMP_Text>().text = mensajesCargados[i + 1].content;
 
-            go.transform.SetSiblingIndex(0); // Poner al principio del contenedor
+            go.transform.SetSiblingIndex(0);
             mensajesVisibles.AddFirst(go);
         }
 
         currentStartIndex = newStartIndex;
-        isLoading = false;
 
-        // Mantener la posición del scroll para que no pegue saltos
         Canvas.ForceUpdateCanvases();
-        LayoutRebuilder.ForceRebuildLayoutImmediate(IAContainer.GetComponent<RectTransform>());
+        LayoutRebuilder.ForceRebuildLayoutImmediate(containerRect);
+
+        float newHeight = containerRect.rect.height;
+        float heightDifference = newHeight - oldHeight;
+
+        Vector2 newPos = scroll.content.anchoredPosition;
+        newPos.y += heightDifference;
+        scroll.content.anchoredPosition = newPos;
+
+        isLoading = false;
     }
 
     private void OnScrollValueChanged(Vector2 pos)

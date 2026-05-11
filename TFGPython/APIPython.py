@@ -154,7 +154,7 @@ def get_character_conversations(char_id: int, db: Session = Depends(database.get
 # ========== MANTENIMIENTO ==========
 
 @app.post("/system/reset")
-def reset_database(db: Session = Depends(database.get_db)):
+def reset_system(db: Session = Depends(database.get_db)):
     try:
         crud.reset_all_tables(db)
         eliminar_todos_los_indices()
