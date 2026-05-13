@@ -100,6 +100,10 @@ def delete_file(db: Session, file_id: int):
     db.commit()
     return True
 
+def get_unique_folders(db: Session):
+    folders = db.query(StoredFile.folder_name).distinct().all()
+    return [f[0] for f in folders]
+
 def reset_all_tables(db: Session):
     try:
         db.query(Conversation).delete()

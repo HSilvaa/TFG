@@ -150,43 +150,46 @@ public class UploaderState : AbstractMenuState
 
         try
         {
-            foreach (var folderPath in contextFolders)
+            api.ResetSystem(async (resetRes) =>
             {
-                string folderName = Path.GetFileName(folderPath);
-
-                // Filtrar archivos válidos de la carpeta
-                List<string> filesInFolder = Directory.GetFiles(folderPath)
-                    .Where(f => allowedExts.Contains(Path.GetExtension(f).ToLower()))
-                    .ToList();
-
-                if (filesInFolder.Count == 0) continue;
-
-                bool isDone = false;
-
-
-                api.UploadContextFiles(folderName, filesInFolder, (res) => {
-
-                    api.BuildContextIndex(folderName, (indexRes) => {
-                        Debug.Log($"Contexto {folderName} sincronizado.");
-                        isDone = true;
-                    });
-                });
-
-                // Espera asíncrona para que el servidor procese un contexto antes del siguiente
-                float timeout = 0;
-                while (!isDone && timeout < 30f)
+                foreach (var folderPath in contextFolders)
                 {
-                    await Task.Delay(100);
-                    timeout += 0.1f;
-                }
-            }
+                    string folderName = Path.GetFileName(folderPath);
 
-            notifManager.ShowNotification("All contexts saved!", Color.green, 3f);
-            CancelarContextoPanel(false);
+                    // Filtrar archivos válidos
+                    List<string> filesInFolder = Directory.GetFiles(folderPath)
+                        .Where(f => allowedExts.Contains(Path.GetExtension(f).ToLower()))
+                        .ToList();
+
+                    if (filesInFolder.Count == 0) continue;
+
+                    bool uploadDone = false;
+
+                    api.UploadContextFiles(folderName, filesInFolder, (uploadRes) => {
+                        uploadDone = true;
+                    });
+
+                    float timeout = 0;
+                    while (!uploadDone && timeout < 30f)
+                    {
+                        await Task.Delay(100);
+                        timeout += 0.1f;
+                    }
+
+                    Debug.Log($"Carpeta {folderName} subida correctamente.");
+                }
+
+                // 3. Una vez subidas TODAS las carpetas, construir los índices una sola vez
+                api.BuildAllIndices((indexRes) =>
+                {
+                    notifManager.ShowNotification("All contexts saved!", Color.green, 3f);
+                    CancelarContextoPanel(false);
+                });
+            });
         }
         catch (Exception e)
         {
-            Debug.LogError(e);
+            Debug.LogError($"Error en la cascada de sincronización: {e.Message}");
             CancelarContextoPanel(true);
         }
     }

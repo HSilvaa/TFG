@@ -15,8 +15,6 @@ from FaissTry18_04 import interactuar
 from faiss_index_builder import construir_todos_los_indices_Unity, eliminar_todos_los_indices
 
 sys.stdout.reconfigure(line_buffering=True)
-UPLOAD_BASE_DIR = "uploads"
-os.makedirs(UPLOAD_BASE_DIR, exist_ok=True)
 
 app = FastAPI(title="AIGERIM AI API - V2")
 database.init_db()
@@ -91,6 +89,16 @@ async def upload_files(
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/files/folders")
+def list_folders(db: Session = Depends(database.get_db)):
+    try:
+        folders = crud.get_unique_folders(db)
+        return {"status": "success", "folders": folders}
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/files/{file_id}")
 def get_file(
     file_id: int,

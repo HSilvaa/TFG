@@ -45,37 +45,93 @@ public class APIManager : MonoBehaviour
         public T[] items; 
     }
 
+    [Serializable]
+    public class FoldersResponse
+    {
+        public string status;
+        public List<string> folders;
+    }
     // ========== MÉTODOS DE CONTEXTO (ARCHIVOS) ==========
 
     public void GetContextos(Action<List<string>> onSuccess)
     {
-        StartCoroutine(GetRequest("/contexts", (json) => {
+        StartCoroutine(GetRequest("/files/folders", (json) => {
             if (!string.IsNullOrEmpty(json))
             {
                 try
                 {
-                    var res = JsonUtility.FromJson<ContextosResponse>(json);
-                    onSuccess?.Invoke(res.contextos);
+                    var res = JsonUtility.FromJson<FoldersResponse>(json);
+
+                    if (res != null && res.folders != null)
+                    {
+                        onSuccess?.Invoke(res.folders);
+                    }
+                    else
+                    {
+                        onSuccess?.Invoke(new List<string>());
+                    }
                 }
                 catch (Exception e)
                 {
-                    Debug.LogError("Error parseando contextos: " + e.Message);
+                    Debug.LogError("Error parseando carpetas de archivos: " + e.Message);
                     onSuccess?.Invoke(new List<string>());
                 }
             }
-            else onSuccess?.Invoke(new List<string>());
+            else
+            {
+                onSuccess?.Invoke(new List<string>());
+            }
         }));
     }
 
     public void UploadContextFiles(string folderName, List<string> filePaths, Action<string> onSuccess = null)
     {
-        StartCoroutine(PostUploadFiles($"/context/{folderName}/upload", filePaths, onSuccess));
+        StartCoroutine(PostUploadFiles("/files/upload", folderName, filePaths, onSuccess));
     }
 
-    public void BuildContextIndex(string folderName, Action<string> onSuccess = null)
+    IEnumerator PostUploadFiles(string endpoint, string folderName, List<string> filePaths, Action<string> callback)
     {
-        StartCoroutine(PostRequest($"/context/{folderName}/save", "{}", onSuccess));
+        List<IMultipartFormSection> formData = new List<IMultipartFormSection>();
+
+        formData.Add(new MultipartFormDataSection("folder_name", folderName));
+
+        foreach (string path in filePaths)
+        {
+            if (File.Exists(path))
+            {
+                byte[] fileData = File.ReadAllBytes(path);
+                string fileName = Path.GetFileName(path);
+
+                string mimeType = "text/plain";
+                if (fileName.EndsWith(".pdf")) mimeType = "application/pdf";
+                else if (fileName.EndsWith(".docx")) mimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+                formData.Add(new MultipartFormFileSection("files", fileData, fileName, mimeType));
+            }
+        }
+
+        UnityWebRequest request = UnityWebRequest.Post(baseUrl + endpoint, formData);
+        yield return request.SendWebRequest();
+
+        if (request.result == UnityWebRequest.Result.Success)
+        {
+            Debug.Log("Subida exitosa: " + request.downloadHandler.text);
+            callback?.Invoke(request.downloadHandler.text);
+        }
+        else
+        {
+            Debug.LogError($"Error Uploading: {request.error} | {request.downloadHandler.text}");
+        }
     }
+
+    public void BuildAllIndices(Action<string> onSuccess = null)
+    {
+        StartCoroutine(PostRequest("/index", "{}", (json) => {
+            Debug.Log("Índices actualizados y sincronizados con éxito.");
+            onSuccess?.Invoke(json);
+        }));
+    }
+
 
     // ========== MÉTODOS DE PERSONAJES ==========
 
