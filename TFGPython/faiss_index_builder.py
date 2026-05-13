@@ -3,8 +3,12 @@ import sys
 import io
 import json
 import re
+from collections import defaultdict
 from datetime import datetime
 from typing import List, Dict
+
+from database import SessionLocal
+from schemas import StoredFile
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
@@ -61,42 +65,63 @@ def dividir_texto_en_chunks_optimizados(texto: str, size: int = 600, overlap: in
 # Extractores de Archivos con Trazabilidad
 # =======================
 
-def extraer_datos_directorio(path_directorio: str) -> List[Dict[str, str]]:
+def extraer_datos_desde_bd(files) -> Dict[str, List[Dict[str, str]]]:
     """
-    Lee archivos y devuelve una lista de diccionarios con contenido y origen (metadatos).
+    Agrupa archivos por folder_name y extrae chunks.
     """
-    datos_procesados = []
-    if not os.path.exists(path_directorio):
-        return datos_procesados
 
-    for nombre_archivo in os.listdir(path_directorio):
-        ruta_completa = os.path.join(path_directorio, nombre_archivo)
-        if not os.path.isfile(ruta_completa): continue
+    datos_por_folder = defaultdict(list)
+
+    for file in files:
 
         texto_archivo = ""
+
         try:
-            if nombre_archivo.endswith(".txt"):
-                with open(ruta_completa, "r", encoding="utf-8") as f:
-                    texto_archivo = f.read()
-            elif nombre_archivo.endswith(".docx"):
-                doc = Document(ruta_completa)
-                texto_archivo = " ".join([p.text for p in doc.paragraphs])
-            elif nombre_archivo.endswith(".pdf"):
-                with open(ruta_completa, 'rb') as file:
-                    reader = PyPDF2.PdfReader(file)
-                    texto_archivo = " ".join([page.extract_text() or "" for page in reader.pages])
+
+            # TXT
+            if file.filename.endswith(".txt"):
+
+                texto_archivo = file.data.decode("utf-8")
+
+            # DOCX
+            elif file.filename.endswith(".docx"):
+
+                doc = Document(io.BytesIO(file.data))
+
+                texto_archivo = " ".join(
+                    [p.text for p in doc.paragraphs]
+                )
+
+            # PDF
+            elif file.filename.endswith(".pdf"):
+
+                pdf_stream = io.BytesIO(file.data)
+
+                reader = PyPDF2.PdfReader(pdf_stream)
+
+                texto_archivo = " ".join([
+                    page.extract_text() or ""
+                    for page in reader.pages
+                ])
 
             if texto_archivo:
-                chunks = dividir_texto_en_chunks_optimizados(texto_archivo)
-                for c in chunks:
-                    datos_procesados.append({
-                        "text": c,
-                        "source": nombre_archivo
-                    })
-        except Exception as e:
-            print(f"Error procesando {nombre_archivo}: {e}")
 
-    return datos_procesados
+                chunks = dividir_texto_en_chunks_optimizados(
+                    texto_archivo
+                )
+
+                for c in chunks:
+
+                    datos_por_folder[file.folder_name].append({
+                        "text": c,
+                        "source": file.filename
+                    })
+
+        except Exception as e:
+
+            print(f"Error procesando {file.filename}: {e}")
+
+    return datos_por_folder
 
 
 # =======================
@@ -188,24 +213,58 @@ def actualizar_memoria_personaje(personaje_name: str, pregunta: str, respuesta: 
 # Integración con API Unity
 # =======================
 
-def construir_todos_los_indices_Unity(rootPath: str):
+def limpiar_indices_obsoletos(carpetas_activas: List[str]):
     """
-    Punto de entrada: Detecta el contexto y dispara la creación/actualización.
+    Borra los archivos .index y _docs.json de carpetas que
+    ya no existen en la base de datos.
     """
-    if not os.path.exists(rootPath):
-        print(f"Error: La ruta '{rootPath}' no existe en el servidor.")
+    if not os.path.exists(INDEX_DIR):
         return
 
-    # Obtener el nombre de la carpeta (ej. 'LoreMedieval')
-    nombre_contexto = os.path.basename(os.path.normpath(rootPath))
+    # Obtenemos todos los archivos actuales en el directorio de índices
+    archivos_en_disco = os.listdir(INDEX_DIR)
 
-    print(f"Escaneando directorio para contexto: {nombre_contexto}")
-    datos = extraer_datos_directorio(rootPath)
+    for archivo in archivos_en_disco:
+        # Extraemos el nombre de la carpeta/personaje del nombre del archivo
+        # Ejemplo: "Asgar.index" -> "Asgar" o "Asgar_docs.json" -> "Asgar"
+        nombre_base = archivo.replace(".index", "").replace("_docs.json", "")
 
-    if datos:
-        crear_indice_faiss_avanzado(nombre_contexto, datos)
-    else:
-        print(f"Cancelado: El directorio '{rootPath}' está vacío.")
+        if nombre_base not in carpetas_activas:
+            archivo_path = os.path.join(INDEX_DIR, archivo)
+            try:
+                os.remove(archivo_path)
+                print(f"LOG: Limpieza - Índice obsoleto eliminado: {archivo}")
+            except Exception as e:
+                print(f"Error eliminando {archivo}: {e}")
+
+
+def construir_todos_los_indices_Unity():
+    """
+    Sincroniza los índices FAISS con la BD:
+    1. Actualiza o crea índices para carpetas con archivos.
+    2. Borra índices de carpetas que ya no tienen archivos en la BD.
+    """
+    db = SessionLocal()
+
+    try:
+        files = db.query(StoredFile).all()
+
+        datos_por_folder = extraer_datos_desde_bd(files)
+
+        carpetas_activas = list(datos_por_folder.keys())
+
+        if not datos_por_folder:
+            print("LOG: No hay archivos en la BD.")
+        else:
+            for folder_name, datos in datos_por_folder.items():
+                print(f"Sincronizando índice para: {folder_name}")
+                crear_indice_faiss_avanzado(folder_name, datos)
+
+        print("LOG: Verificando índices obsoletos...")
+        limpiar_indices_obsoletos(carpetas_activas)
+
+    finally:
+        db.close()
 
 
 def eliminar_todos_los_indices():

@@ -2,10 +2,12 @@ import shutil
 import sys
 import os
 import traceback
-from typing import List
-from fastapi import FastAPI, HTTPException, Depends, UploadFile, File
+from io import BytesIO
+from typing import List, Union
+from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from starlette.responses import StreamingResponse
 
 import crud
 import database
@@ -34,51 +36,145 @@ class MessageRequest(BaseModel):
 
 # ========== ENDPOINTS DE ARCHIVOS Y CONTEXTO ==========
 
-@app.get("/contexts")
-def get_all_contextos():
-    """
-    Devuelve la lista de todos los contextos (carpetas) disponibles en el servidor.
-    """
+@app.post("/files/upload")
+async def upload_files(
+        folder_name: str = Form(...),
+        files: List[UploadFile] = File(...),
+        db: Session = Depends(database.get_db)
+):
+    ALLOWED_EXTENSIONS = {".txt", ".pdf", ".docx"}
+    ALLOWED_MIME_TYPES = {
+        "text/plain",
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+
     try:
-        if not os.path.exists(UPLOAD_BASE_DIR):
-            return []
-        folders = [f for f in os.listdir(UPLOAD_BASE_DIR) if os.path.isdir(os.path.join(UPLOAD_BASE_DIR, f))]
-        return {"contextos": folders}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        saved_files = []
 
-@app.post("/context/{folder_name}/upload")
-async def upload_files_to_folder(folder_name: str, files: List[UploadFile] = File(...)):
-    target_path = os.path.join(UPLOAD_BASE_DIR, folder_name)
-    os.makedirs(target_path, exist_ok=True)
+        if not isinstance(files, list):
+            files = [files]
 
-    saved_files = []
-    for file in files:
-        if "text" not in file.content_type and not file.filename.endswith('.txt'):
-            continue
+        for file in files:
+            extension = os.path.splitext(file.filename)[1].lower()
 
-        file_location = os.path.join(target_path, file.filename)
-        with open(file_location, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        saved_files.append(file.filename)
+            if extension not in ALLOWED_EXTENSIONS or file.content_type not in ALLOWED_MIME_TYPES:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Archivo '{file.filename}' no permitido. Solo se aceptan TXT, PDF y DOCX."
+                )
 
-    return {"status": "files_persisted", "folder": folder_name, "total": len(saved_files)}
+            file_data = await file.read()
 
-@app.post("/context/{folder_name}/save")
-def build_index_from_persisted_folder(folder_name: str, db: Session = Depends(database.get_db)):
-    try:
-        folder = crud.update_or_create_root_folder(db, folder_name)
+            saved_file = crud.save_file(
+                db=db,
+                folder_name=folder_name,
+                filename=file.filename,
+                content_type=file.content_type,
+                data=file_data
+            )
 
-        construir_todos_los_indices_Unity(folder.route)
+            saved_files.append({
+                "id": saved_file.id,
+                "filename": saved_file.filename
+            })
 
         return {
             "status": "success",
-            "message": f"Index added/updated for: {folder_name}",
-            "route": folder.route
+            "folder": folder_name,
+            "total_files": len(saved_files),
+            "files": saved_files
         }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error building index: {str(e)}")
 
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+@app.get("/files/{file_id}")
+def get_file(
+    file_id: int,
+    db: Session = Depends(database.get_db)
+):
+    try:
+
+        stored_file = crud.get_file_by_id(db, file_id)
+
+        if not stored_file:
+            raise HTTPException(
+                status_code=404,
+                detail="File not found"
+            )
+
+        return StreamingResponse(
+            BytesIO(stored_file.data),
+            media_type=stored_file.content_type,
+            headers={
+                "Content-Disposition":
+                    f"attachment; filename={stored_file.filename}"
+            }
+        )
+
+    except Exception as e:
+        traceback.print_exc()
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
+@app.get("/files/folder/{folder_name}")
+def get_files_by_folder(
+    folder_name: str,
+    db: Session = Depends(database.get_db)
+):
+    try:
+
+        files = crud.get_files_by_folder(db, folder_name)
+
+        return [
+            {
+                "id": f.id,
+                "filename": f.filename,
+                "content_type": f.content_type,
+                "created_at": f.created_at
+            }
+            for f in files
+        ]
+
+    except Exception as e:
+        traceback.print_exc()
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
+@app.delete("/files/{file_id}")
+def delete_file(
+    file_id: int,
+    db: Session = Depends(database.get_db)
+):
+    try:
+
+        deleted = crud.delete_file(db, file_id)
+
+        if not deleted:
+            raise HTTPException(
+                status_code=404,
+                detail="File not found"
+            )
+
+        return {
+            "status": "success",
+            "message": f"File {file_id} deleted"
+        }
+
+    except Exception as e:
+        traceback.print_exc()
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
 
 # ========== ENDPOINTS DE PERSONAJES (JERÁRQUICOS) ==========
 
@@ -116,10 +212,30 @@ def get_character_by_id(char_id: int, db: Session = Depends(database.get_db)):
 
 @app.delete("/characters/{char_id}")
 def delete_character(char_id: int, db: Session = Depends(database.get_db)):
-    """Borra un personaje."""
+    char = crud.get_character_by_id(db, char_id)
+    if not char:
+        raise HTTPException(status_code=404, detail="Character not found")
+
+    char_name = char.name
+    char_folder = "characters"
+
+    files_to_remove = [
+        os.path.join(char_folder, f"personaje_{char_name}.index"),
+        os.path.join(char_folder, f"personaje_{char_name}_docs.json")
+    ]
+
+    for file_path in files_to_remove:
+        try:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+                print(f"LOG: Archivo eliminado: {file_path}")
+        except Exception as e:
+            print(f"Error eliminando archivo {file_path}: {e}")
+
     success = crud.delete_character(db, char_id)
     if not success:
         raise HTTPException(status_code=404, detail="Character not found")
+
     return {"status": "success", "message": f"Character {char_id} deleted"}
 
 
@@ -159,13 +275,20 @@ def reset_system(db: Session = Depends(database.get_db)):
         crud.reset_all_tables(db)
         eliminar_todos_los_indices()
 
-        if os.path.exists(UPLOAD_BASE_DIR):
-            shutil.rmtree(UPLOAD_BASE_DIR)
-        os.makedirs(UPLOAD_BASE_DIR, exist_ok=True)
-
         return {"status": "success", "message": "System reset complete"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/index")
+def build_index():
+
+    construir_todos_los_indices_Unity()
+
+    return {
+        "status": "success"
+    }
+
 
 @app.get("/status")
 def get_status():

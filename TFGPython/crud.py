@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from schemas import Character, Conversation, Resumen, Folder
+from schemas import Character, Conversation, Resumen, Folder, StoredFile
 import os
 # ===========================
 # GESTIÓN DE PERSONAJES
@@ -61,29 +61,51 @@ def update_or_create_resumen(db: Session, character_id: int, text: str):
 # ===========================
 # SISTEMA DE ARCHIVOS Y RESET
 # ===========================
-
-def update_or_create_root_folder(db: Session, name: str):
-    internal_route = os.path.join("uploads", name)
-
-    db_folder = db.query(Folder).filter(Folder.id == 1).first()
-
-    if db_folder:
-        db_folder.name = name
-        db_folder.route = internal_route
-    else:
-        db_folder = Folder(id=1, name=name, route=internal_route)
-        db.add(db_folder)
-
+def save_file(
+    db: Session,
+    folder_name: str,
+    filename: str,
+    content_type: str,
+    data: bytes
+):
+    new_file = StoredFile(
+        folder_name=folder_name,
+        filename=filename,
+        content_type=content_type,
+        data=data
+    )
+    db.add(new_file)
     db.commit()
-    db.refresh(db_folder)
-    return db_folder
+    db.refresh(new_file)
+    return new_file
+
+def get_file_by_id(db: Session, file_id: int):
+    return db.query(StoredFile)\
+             .filter(StoredFile.id == file_id)\
+             .first()
+
+def get_files_by_folder(db: Session, folder_name: str):
+    return db.query(StoredFile)\
+             .filter(StoredFile.folder_name == folder_name)\
+             .order_by(StoredFile.created_at.asc())\
+             .all()
+
+def delete_file(db: Session, file_id: int):
+    file = db.query(StoredFile)\
+             .filter(StoredFile.id == file_id)\
+             .first()
+    if not file:
+        return False
+    db.delete(file)
+    db.commit()
+    return True
 
 def reset_all_tables(db: Session):
     try:
         db.query(Conversation).delete()
         db.query(Resumen).delete()
         db.query(Character).delete()
-        db.query(Folder).delete()
+        db.query(StoredFile).delete()
         db.commit()
         return True
     except Exception as e:

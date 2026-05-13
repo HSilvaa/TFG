@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, LargeBinary
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
@@ -39,3 +39,18 @@ class Folder(Base):
     name = Column(String(255), unique=True) # Nombre de la carpeta (ej. "LoreMedieval")
     route = Column(String(500))            # Ruta interna (ej. "uploads/LoreMedieval")
     # parent_folder lo podemos quitar si no vas a hacer subcarpetas anidadas
+
+class StoredFile(Base):
+    __tablename__ = 'StoredFile'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    folder_name = Column(String(255), nullable=False)
+
+    filename = Column(String(255), nullable=False)
+
+    content_type = Column(String(255))
+
+    data = Column(LargeBinary, nullable=False)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
