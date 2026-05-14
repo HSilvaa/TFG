@@ -1,11 +1,9 @@
 services:
   api_aigerim:
-    build: ./TFGPython
+    build: .
     container_name: aigerim_server
     ports:
       - "8000:8000"
     volumes:
       - ./TFGPython/BasesDeDatos:/app/BasesDeDatos
-      - ./TFGPython/characters:/app/characters
-      - ./UploadedFiles:/UploadedFiles  # Para que el contenedor vea los archivos de Unity
     restart: always

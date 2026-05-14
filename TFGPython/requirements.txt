@@ -9,3 +9,4 @@ sentence-transformers
 numpy
 requests
 openai==0.28
+python-multipart

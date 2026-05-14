@@ -131,7 +131,7 @@ public class UploaderState : AbstractMenuState
         notifManager.ShowNotification("Validating structure...", Color.yellow, 1f);
         await Task.Delay(500);
 
-        // 1. Validar que no haya archivos sueltos en la raíz (deben estar en carpetas/épocas)
+        // 1. Validar que no haya archivos en la raíz
         if (Directory.GetFiles(rootFolder).Length > 0)
         {
             notifManager.ShowNotification("Error: Files in root not allowed. Move them to a folder.", Color.red, 4f);
@@ -145,6 +145,30 @@ public class UploaderState : AbstractMenuState
             return;
         }
 
+        // 2. NUEVA VALIDACIÓN PROFUNDA: Verificar el contenido de cada carpeta de contexto
+        foreach (var folderPath in contextFolders)
+        {
+            string folderName = Path.GetFileName(folderPath);
+
+            // A) Validar que no contenga subcarpetas
+            if (Directory.GetDirectories(folderPath).Length > 0)
+            {
+                notifManager.ShowNotification($"Error: Folder '{folderName}' cannot contain subfolders.", Color.red, 4f);
+                return;
+            }
+
+            // B) Validar que TODOS los archivos de la carpeta sean válidos
+            string[] allFiles = Directory.GetFiles(folderPath);
+            bool hasInvalidFiles = allFiles.Any(f => !allowedExts.Contains(Path.GetExtension(f).ToLower()));
+
+            if (hasInvalidFiles)
+            {
+                notifManager.ShowNotification($"Error: '{folderName}' contains files with unallowed extensions.", Color.red, 4f);
+                return;
+            }
+        }
+
+        // 3. Proceso de subida (se mantiene igual pero optimizado con la validación previa)
         showCreandoContextoPanel();
         notifManager.ShowNotification("Uploading contexts...", Color.cyan, 2f);
 
@@ -156,10 +180,8 @@ public class UploaderState : AbstractMenuState
                 {
                     string folderName = Path.GetFileName(folderPath);
 
-                    // Filtrar archivos válidos
-                    List<string> filesInFolder = Directory.GetFiles(folderPath)
-                        .Where(f => allowedExts.Contains(Path.GetExtension(f).ToLower()))
-                        .ToList();
+                    // Como ya validamos arriba, sabemos que todos los archivos aquí son válidos
+                    List<string> filesInFolder = Directory.GetFiles(folderPath).ToList();
 
                     if (filesInFolder.Count == 0) continue;
 
@@ -179,7 +201,7 @@ public class UploaderState : AbstractMenuState
                     Debug.Log($"Carpeta {folderName} subida correctamente.");
                 }
 
-                // 3. Una vez subidas TODAS las carpetas, construir los índices una sola vez
+                // 4. Construir índices
                 api.BuildAllIndices((indexRes) =>
                 {
                     notifManager.ShowNotification("All contexts saved!", Color.green, 3f);
@@ -214,10 +236,11 @@ public class UploaderState : AbstractMenuState
             btn.GetComponentInChildren<TMP_Text>().text = folderName;
             btn.transform.Find("Icon").GetComponent<Image>().sprite = GetIconForExtension("folder");
 
-            if (currentNormalized != rootNormalized) PintarBotonError(btn);
+           
+            bool isIllegalFolderLocation = (currentNormalized != rootNormalized);
+            if (isIllegalFolderLocation) PintarBotonError(btn);
 
             btn.GetComponent<Button>().onClick.AddListener(() => HandleDoubleClick(folder, true));
-
             AddRightClickMenu(btn, folder, true);
         }
 
