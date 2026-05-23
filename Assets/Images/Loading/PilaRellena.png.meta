@@ -134,7 +134,8 @@ TextureImporter:
     secondaryTextures: []
     spriteCustomMetadata:
       entries: []
-    nameFileIdTable: {}
+    nameFileIdTable:
+      PilaRellena_0: 1600758574515481682
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 
