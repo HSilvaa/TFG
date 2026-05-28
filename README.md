@@ -54,7 +54,142 @@ Para implementar el sistema de IA de Aigerim de forma transparente y aislada den
 
 A continuación, se especifican los puntos de acceso (endpoints) HTTP disponibles para que el cliente de Unity o herramientas externas invoquen los servicios del backend a través de peticiones REST (ejemplificadas mediante instrucciones `curl` estándar):
 
-### 1. Verificación de Estado (Heartbeat)
-Utilizado de forma preventiva por los subsistemas de Unity para comprobar la disponibilidad y estado del servidor Docker antes de habilitar los componentes de comunicación en el motor de juego.
-```bash
+📡 Base URL
+http://localhost:8000
+🔍 Endpoints Disponibles
+1. Verificación de Estado (Heartbeat)
+
+Comprueba si el servidor está activo y disponible.
+
 curl -X GET http://localhost:8000/status
+2. Subir Archivos a una Carpeta de Contexto
+
+Permite subir documentos (.txt, .pdf, .docx) asociados a una categoría o época concreta.
+
+curl -X POST http://localhost:8000/files/upload \
+  -F "folder_name=EM" \
+  -F "files=@/ruta/al/documento.pdf"
+Parámetros
+Campo	Tipo	Descripción
+folder_name	string	Nombre de la carpeta o categoría
+files	file	Archivo a subir
+3. Listar Carpetas de Contexto
+
+Obtiene todas las carpetas únicas registradas en el sistema.
+
+curl -X GET http://localhost:8000/files/folders
+4. Listar Archivos de una Carpeta
+
+Devuelve todos los documentos pertenecientes a una carpeta específica.
+
+curl -X GET http://localhost:8000/files/folder/EM
+5. Eliminar Archivo por ID
+
+Elimina un documento del sistema mediante su identificador.
+
+curl -X DELETE http://localhost:8000/files/{file_id}
+👤 Gestión de Personajes (NPCs)
+6. Crear un Nuevo NPC
+
+Registra un personaje en la base de datos.
+
+⚠️ Se recomienda que el campo epoca coincida con el nombre de la carpeta de contexto utilizada.
+
+curl -X POST http://localhost:8000/characters \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "LUNA",
+    "age": "30",
+    "description": "Un personaje medieval de prueba",
+    "epoca": "EM"
+  }'
+Body JSON
+Campo	Tipo	Descripción
+name	string	Nombre del personaje
+age	string	Edad del personaje
+description	string	Descripción del NPC
+epoca	string	Contexto o carpeta asociada
+7. Listar Todos los NPCs
+
+Recupera todos los personajes registrados.
+
+curl -X GET http://localhost:8000/characters
+8. Obtener Datos de un NPC
+
+Devuelve la información detallada de un personaje específico.
+
+curl -X GET http://localhost:8000/characters/{char_id}
+9. Eliminar NPC
+
+Borra definitivamente un personaje y sus índices asociados.
+
+curl -X DELETE http://localhost:8000/characters/{char_id}
+💬 Sistema Conversacional (RAG)
+10. Conversar con un NPC
+
+Envía un mensaje al modelo IA asociado al personaje.
+
+El sistema utiliza:
+
+Recuperación semántica mediante FAISS
+Contexto documental
+OpenAI para generación de respuestas
+curl -X POST http://localhost:8000/characters/{char_id}/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "Hola"
+  }'
+Body JSON
+Campo	Tipo	Descripción
+message	string	Mensaje enviado al NPC
+11. Obtener Historial Conversacional
+
+Recupera las conversaciones previas del personaje.
+
+curl -X GET http://localhost:8000/characters/{char_id}/conversations
+🧠 Indexación FAISS
+12. Construir / Actualizar Índices
+
+Procesa y vectoriza los documentos cargados para habilitar el sistema RAG.
+
+curl -X POST http://localhost:8000/index
+⚠️ Administración del Sistema
+13. Reset Completo del Sistema
+
+Elimina:
+
+Base de datos relacional
+Conversaciones
+Personajes
+Índices FAISS
+Documentos procesados
+
+⚠️ Acción irreversible.
+
+curl -X POST http://localhost:8000/system/reset
+🧩 Arquitectura General
+
+El sistema está compuesto por:
+
+FastAPI → Backend REST
+FAISS → Búsqueda vectorial semántica
+OpenAI API → Generación de respuestas
+SQLite / PostgreSQL → Persistencia relacional
+Unity Client → Integración con videojuegos
+🚀 Flujo Recomendado
+Subir documentos
+Construir índices FAISS
+Crear NPC
+Iniciar conversación
+Recuperar historial conversacional
+📦 Formatos de Archivo Compatibles
+.txt
+.pdf
+.docx
+🛠️ Estado del Proyecto
+
+Versión actual:
+
+AIGERIM AI API - V2
+
+
