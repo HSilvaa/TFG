@@ -54,9 +54,9 @@ Para implementar el sistema de IA de Aigerim de forma transparente y aislada den
 
 A continuación, se especifican los puntos de acceso (endpoints) HTTP disponibles para que el cliente de Unity o herramientas externas invoquen los servicios del backend a través de peticiones REST (ejemplificadas mediante instrucciones `curl` estándar):
 
-##📡 Base URL
+## 📡 Base URL
 http://localhost:8000
-##🔍 Endpoints Disponibles
+## 🔍 Endpoints Disponibles
 ### 1. Verificación de Estado (Heartbeat)
 
 Comprueba si el servidor está activo y disponible.
