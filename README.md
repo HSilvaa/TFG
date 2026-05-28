@@ -54,15 +54,15 @@ Para implementar el sistema de IA de Aigerim de forma transparente y aislada den
 
 A continuación, se especifican los puntos de acceso (endpoints) HTTP disponibles para que el cliente de Unity o herramientas externas invoquen los servicios del backend a través de peticiones REST (ejemplificadas mediante instrucciones `curl` estándar):
 
-📡 Base URL
+##📡 Base URL
 http://localhost:8000
-🔍 Endpoints Disponibles
-1. Verificación de Estado (Heartbeat)
+##🔍 Endpoints Disponibles
+### 1. Verificación de Estado (Heartbeat)
 
 Comprueba si el servidor está activo y disponible.
 
 curl -X GET http://localhost:8000/status
-2. Subir Archivos a una Carpeta de Contexto
+### 2. Subir Archivos a una Carpeta de Contexto
 
 Permite subir documentos (.txt, .pdf, .docx) asociados a una categoría o época concreta.
 
@@ -73,23 +73,23 @@ Parámetros
 Campo	Tipo	Descripción
 folder_name	string	Nombre de la carpeta o categoría
 files	file	Archivo a subir
-3. Listar Carpetas de Contexto
+### 3. Listar Carpetas de Contexto
 
 Obtiene todas las carpetas únicas registradas en el sistema.
 
 curl -X GET http://localhost:8000/files/folders
-4. Listar Archivos de una Carpeta
+### 4. Listar Archivos de una Carpeta
 
 Devuelve todos los documentos pertenecientes a una carpeta específica.
 
 curl -X GET http://localhost:8000/files/folder/EM
-5. Eliminar Archivo por ID
+### 5. Eliminar Archivo por ID
 
 Elimina un documento del sistema mediante su identificador.
 
 curl -X DELETE http://localhost:8000/files/{file_id}
-👤 Gestión de Personajes (NPCs)
-6. Crear un Nuevo NPC
+## 👤 Gestión de Personajes (NPCs)
+### 6. Crear un Nuevo NPC
 
 Registra un personaje en la base de datos.
 
@@ -109,23 +109,23 @@ name	string	Nombre del personaje
 age	string	Edad del personaje
 description	string	Descripción del NPC
 epoca	string	Contexto o carpeta asociada
-7. Listar Todos los NPCs
+### 7. Listar Todos los NPCs
 
 Recupera todos los personajes registrados.
 
 curl -X GET http://localhost:8000/characters
-8. Obtener Datos de un NPC
+### 8. Obtener Datos de un NPC
 
 Devuelve la información detallada de un personaje específico.
 
 curl -X GET http://localhost:8000/characters/{char_id}
-9. Eliminar NPC
+### 9. Eliminar NPC
 
 Borra definitivamente un personaje y sus índices asociados.
 
 curl -X DELETE http://localhost:8000/characters/{char_id}
-💬 Sistema Conversacional (RAG)
-10. Conversar con un NPC
+## 💬 Sistema Conversacional (RAG)
+### 10. Conversar con un NPC
 
 Envía un mensaje al modelo IA asociado al personaje.
 
@@ -142,19 +142,19 @@ curl -X POST http://localhost:8000/characters/{char_id}/chat \
 Body JSON
 Campo	Tipo	Descripción
 message	string	Mensaje enviado al NPC
-11. Obtener Historial Conversacional
+### 11. Obtener Historial Conversacional
 
 Recupera las conversaciones previas del personaje.
 
 curl -X GET http://localhost:8000/characters/{char_id}/conversations
 🧠 Indexación FAISS
-12. Construir / Actualizar Índices
+### 12. Construir / Actualizar Índices
 
 Procesa y vectoriza los documentos cargados para habilitar el sistema RAG.
 
 curl -X POST http://localhost:8000/index
-⚠️ Administración del Sistema
-13. Reset Completo del Sistema
+## ⚠️ Administración del Sistema
+### 13. Reset Completo del Sistema
 
 Elimina:
 
@@ -167,7 +167,7 @@ Documentos procesados
 ⚠️ Acción irreversible.
 
 curl -X POST http://localhost:8000/system/reset
-🧩 Arquitectura General
+## 🧩 Arquitectura General
 
 El sistema está compuesto por:
 
@@ -188,7 +188,7 @@ Recuperar historial conversacional
 .docx
 🛠️ Estado del Proyecto
 
-Versión actual:
+## Versión actual:
 
 AIGERIM AI API - V2
 
