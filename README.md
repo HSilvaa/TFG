@@ -14,6 +14,7 @@ Antes de proceder con cualquiera de los métodos de instalación, asegúrese de 
 1.  **Python:** Versión `3.10.11` o superior instalada en el sistema con sus correspondientes variables de entorno configuradas en el `PATH`.
 2.  **Docker:** Tener instalado y en ejecución [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Recomendado para la integración limpia en producción/juego real).
 3.  **Clonación:** Haber clonado de forma local el repositorio oficial de GitHub manteniendo la jerarquía de carpetas nativa.
+4.  **Instalación de Dependencias:** Acceda a la carpeta raíz de `TFGPython` y ejecute el script automatizado `.bat` (`add installation.bat`). No cierre la ventana de la terminal hasta observar el mensaje explícito de finalización.
 
 ---
 
@@ -22,12 +23,11 @@ Antes de proceder con cualquiera de los métodos de instalación, asegúrese de 
 Este método permite levantar el ecosistema de forma rápida utilizando los ejecutables integrados y scripts de automatización locales en Windows.
 
 ### Guía paso a paso:
-1.  **Instalación de Dependencias:** Acceda a la carpeta raíz de `TFGPython` y ejecute el script automatizado `.bat` (`add installation.bat`). No cierre la ventana de la terminal hasta observar el mensaje explícito de finalización.
-2.  **Iniciar la Aplicación:** Localice el archivo `.exe` compilado del proyecto dentro de los archivos del sistema y ejecútelo para iniciar la interfaz gráfica de Aigerim. 
+1.  **Iniciar la Aplicación:** Localice el archivo `.exe` compilado del proyecto dentro de los archivos del sistema y ejecútelo para iniciar la interfaz gráfica de Aigerim. 
     * *Nota Crítica:* Al abrir el ejecutable se instanciará una ventana de consola secundaria de Python. Este es el servidor corriendo en segundo plano y **NO debe cerrarse** bajo ninguna circunstancia. En caso de caída accidental, la aplicación cliente intentará relanzarlo automáticamente de forma interna.
-3.  **Inyección y Guardado de Contexto:** Si desea inicializar un mundo o entorno interactivo nuevo, arrastre o agregue los archivos de conocimiento compatibles (`.pdf`, `.docx`, `.txt`, etc.) y seleccione la opción **Guardar contexto**. *Si es la primera vez que inicia la aplicación, ejecute este paso con los documentos de prueba suministrados para asentar los índices iniciales.*
-4.  **Modelado del NPC:** Complete el formulario de creación de personaje rellenando los campos de *Nombre*, *Edad*, *Época/Mundo* (vínculo directo al contexto documental) y una *Descripción detallada*.
-5.  **Interacción:** Una vez registrado el NPC, podrá interactuar en tiempo real con él a través del chat interactivo para verificar que su comportamiento, tono y conocimiento se alinean con las directrices deseadas antes de su integración final en el motor.
+2.  **Inyección y Guardado de Contexto:** Si desea inicializar un mundo o entorno interactivo nuevo, arrastre o agregue los archivos de conocimiento compatibles (`.pdf`, `.docx`, `.txt`, etc.) y seleccione la opción **Guardar contexto**. *Si es la primera vez que inicia la aplicación, ejecute este paso con los documentos de prueba suministrados para asentar los índices iniciales.*
+3.  **Modelado del NPC:** Complete el formulario de creación de personaje rellenando los campos de *Nombre*, *Edad*, *Época/Mundo* (vínculo directo al contexto documental) y una *Descripción detallada*.
+4.  **Interacción:** Una vez registrado el NPC, podrá interactuar en tiempo real con él a través del chat interactivo para verificar que su comportamiento, tono y conocimiento se alinean con las directrices deseadas antes de su integración final en el motor.
 
 ---
 
