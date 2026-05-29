@@ -69,10 +69,10 @@ Permite subir documentos (.txt, .pdf, .docx) asociados a una categoría o época
 curl -X POST http://localhost:8000/files/upload \
   -F "folder_name=EM" \
   -F "files=@/ruta/al/documento.pdf"
-Parámetros
-Campo	Tipo	Descripción
-folder_name	string	Nombre de la carpeta o categoría
-files	file	Archivo a subir
+| Campo | Tipo | Descripción |
+| :--- | :--- | :--- |
+| **folder_name** | `string` | Nombre de la carpeta o categoría |
+| **files** | `file` | Archivo a subir |
 ### 3. Listar Carpetas de Contexto
 
 Obtiene todas las carpetas únicas registradas en el sistema.
@@ -91,9 +91,7 @@ curl -X DELETE http://localhost:8000/files/{file_id}
 ## 👤 Gestión de Personajes (NPCs)
 ### 6. Crear un Nuevo NPC
 
-Registra un personaje en la base de datos.
-
-⚠️ Se recomienda que el campo epoca coincida con el nombre de la carpeta de contexto utilizada.
+Registra un personaje en la base de datos. Se REQUIERE que el campo epoca coincida con el nombre de la carpeta de contexto utilizada.
 
 curl -X POST http://localhost:8000/characters \
   -H "Content-Type: application/json" \
@@ -103,13 +101,13 @@ curl -X POST http://localhost:8000/characters \
     "description": "Un personaje medieval de prueba",
     "epoca": "EM"
   }'
-Body JSON
-Campo	Tipo	Descripción
-name	string	Nombre del personaje
-age	string	Edad del personaje
-description	string	Descripción del NPC
-epoca	string	Contexto o carpeta asociada
-### 7. Listar Todos los NPCs
+  
+| Campo | Tipo | Descripción |
+| :--- | :--- | :--- |
+| **name** | `string` | Nombre del personaje |
+| **age** | `string` | Edad del personaje |
+| **description** | `string` | Descripción del NPC |
+| **epoca** | `string` | Contexto o carpeta asociada |
 
 Recupera todos los personajes registrados.
 
@@ -129,19 +127,15 @@ curl -X DELETE http://localhost:8000/characters/{char_id}
 
 Envía un mensaje al modelo IA asociado al personaje.
 
-El sistema utiliza:
-
-Recuperación semántica mediante FAISS
-Contexto documental
-OpenAI para generación de respuestas
 curl -X POST http://localhost:8000/characters/{char_id}/chat \
   -H "Content-Type: application/json" \
   -d '{
     "message": "Hola"
   }'
-Body JSON
-Campo	Tipo	Descripción
-message	string	Mensaje enviado al NPC
+
+| Campo | Tipo | Descripción |
+| :--- | :--- | :--- |
+| **message** | `string` | Mensaje enviado al NPC |
 ### 11. Obtener Historial Conversacional
 
 Recupera las conversaciones previas del personaje.
@@ -156,13 +150,12 @@ curl -X POST http://localhost:8000/index
 ## ⚠️ Administración del Sistema
 ### 13. Reset Completo del Sistema
 
-Elimina:
-
-Base de datos relacional
-Conversaciones
-Personajes
-Índices FAISS
-Documentos procesados
+Elimina: 
+1. Base de datos relaciona
+2. Conversaciones
+3. Personajes
+4. Índices FAISS
+5. Documentos procesados
 
 ⚠️ Acción irreversible.
 
@@ -172,24 +165,23 @@ curl -X POST http://localhost:8000/system/reset
 El sistema está compuesto por:
 
 FastAPI → Backend REST
+
 FAISS → Búsqueda vectorial semántica
-OpenAI API → Generación de respuestas
-SQLite / PostgreSQL → Persistencia relacional
+
+OpenAI API → Generación de respuestas con IA
+
+SQLite  → Persistencia relacional
+
 Unity Client → Integración con videojuegos
-🚀 Flujo Recomendado
-Subir documentos
-Construir índices FAISS
-Crear NPC
-Iniciar conversación
-Recuperar historial conversacional
-📦 Formatos de Archivo Compatibles
+
+### Flujo Recomendado
+Subir documentos → Construir índices FAISS → Crear NPC → Iniciar conversación → Recuperar historial conversacional
+
+### 📦 Formatos de Archivo Compatibles
 .txt
 .pdf
 .docx
-🛠️ Estado del Proyecto
-
-## Versión actual:
-
-AIGERIM AI API - V2
+## 🛠️ Estado del Proyecto
+Versión actual: AIGERIM AI API - V2
 
 
