@@ -18,6 +18,14 @@ Antes de proceder con cualquiera de los métodos de instalación, asegúrese de 
 
 ---
 
+### Configuración de Credenciales 🔑
+
+Antes de levantar el contenedor, es necesario configurar la API Key de OpenAI:
+
+1. Duplique el archivo `.env.example`, que se encuentra en `/TFGPython` y renómbrelo a `.env`.
+2. Abra el archivo `.env` y sustituya `tu_clave_de_openai_aqui` por su clave API válida de OpenAI.
+3. Guarde el archivo.
+
 ## 🚀 Método 1: Ejecución en Local (Fase de Pruebas / Servidor Autónomo)
 
 Este método permite levantar el ecosistema de forma rápida utilizando los ejecutables integrados y scripts de automatización locales en Windows.
@@ -47,6 +55,13 @@ Para implementar el sistema de IA de Aigerim de forma transparente y aislada den
     ```
     *Nota:* El proceso de compilación inicial puede demorar unos minutos debido a la descarga e instalación de las dependencias pesadas de IA (`FAISS`, `sentence-transformers`, procesamiento numérico, etc.). El contenedor estará completamente operativo y a la escucha en el puerto de red local `8000` en cuanto los logs reflejen la siguiente línea:  
     `INFO: Uvicorn running on http://0.0.0.0:8000`
+ *Nota 2:* Posteriormente, para levantar y tirar el contenedor, solo debe alternar entre los siguientes comandos:
+    ```bash
+    docker-compose up
+    ```
+    ```bash
+    docker-compose down
+    ```
 
 ---
 
