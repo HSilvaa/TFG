@@ -10,3 +10,4 @@ numpy
 requests
 openai==0.28
 python-multipart
+python-dotenv

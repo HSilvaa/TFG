@@ -11,7 +11,7 @@ from starlette.responses import StreamingResponse
 
 import crud
 import database
-from FaissTry18_04 import interactuar
+from npc_brain import interactuar
 from faiss_index_builder import construir_todos_los_indices_Unity, eliminar_todos_los_indices
 
 sys.stdout.reconfigure(line_buffering=True)
