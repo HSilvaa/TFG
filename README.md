@@ -22,7 +22,7 @@ Antes de proceder con cualquiera de los métodos de instalación, asegúrese de 
 
 Antes de levantar el contenedor, es necesario configurar la API Key de OpenAI:
 
-1. Duplique el archivo `.env.example` y renómbrelo a `.env`.
+1. Duplique el archivo `.env.example`, que se encuentra en `/TFGPython` y renómbrelo a `.env`.
 2. Abra el archivo `.env` y sustituya `tu_clave_de_openai_aqui` por su clave API válida de OpenAI.
 3. Guarde el archivo.
 
