@@ -261,6 +261,8 @@ public class ChattingMenuState : AbstractMenuState
         sendButt.gameObject.SetActive(false);
         backButt.gameObject.SetActive(false);
         messageField.gameObject.SetActive(false);
+        scroll.gameObject.SetActive(false);
+
         scroll.onValueChanged.RemoveAllListeners();
 
         ClearVisibleMessages();
